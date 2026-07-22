@@ -24,7 +24,7 @@ export function NavBar() {
           </span>
           <span className="grid min-w-0">
             <span className="truncate text-sm font-bold text-blue-100">
-              Sistema de Informatização e Gestão para Oficinas
+              Sistema de Informatizacao e Gestao para Oficinas
             </span>
           </span>
         </Link>
@@ -33,8 +33,28 @@ export function NavBar() {
           {token ? (
             <>
               <span className="text-sm font-bold text-blue-50">
-                {`Olá, ${userName || "usuario"}`}
+                {`Ola, ${userName || "usuario"}`}
               </span>
+              <Link
+                href={routes.profile}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white shadow-sm hover:bg-white hover:text-[var(--sigo-blue-deep)]"
+                aria-label="Perfil"
+                title="Perfil"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M20 21a8 8 0 0 0-16 0" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </Link>
               <button
                 type="button"
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white shadow-sm hover:bg-white hover:text-[var(--sigo-blue-deep)]"

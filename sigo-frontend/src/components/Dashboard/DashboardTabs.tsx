@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { routes } from "@/navigation/routes";
 
 const tabs = [
-  { label: "Visão Geral", href: routes.dashboard },
+  { label: "Visao Geral", href: routes.dashboard },
   { label: "Gerencia", href: routes.management },
-  { label: "Análise e Métricas", href: routes.analytics },
+  { label: "Analise e Metricas", href: routes.analytics },
+  { label: "Perfil", href: routes.profile },
 ];
 
 export function DashboardTabs() {

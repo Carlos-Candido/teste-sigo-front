@@ -12,6 +12,8 @@ export type AuthContextValue = {
   setToken: (value: string) => void;
   userName: string;
   fullName: string;
+  userEmail: string;
+  userId: number | null;
   userRole: string;
   oficinaId: number | null;
   login: (payload: AuthLoginPayload) => Promise<ApiResult>;

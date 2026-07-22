@@ -6,6 +6,11 @@ import { fetchJson } from "@/lib/api";
 import { fetchCepAddress } from "@/lib/cep";
 import type { CrudConfig } from "@/components/CrudPanel";
 import { entityConfigs } from "@/models/entityConfigs";
+import {
+  getAllowedManagementConfigs,
+  getEntityCapability,
+  type EntityCapability,
+} from "@/lib/accessControl";
 import { DashboardTabs } from "@/components/Dashboard/DashboardTabs";
 import { NavBar } from "@/components/Sidebar/NavBar";
 import { ProtectedRoute } from "@/components/Auth/RouteGuards";
@@ -32,7 +37,7 @@ import {
   type SelectOption,
 } from "@/lib/fieldMetadata";
 
-type FormMode = "create" | "edit";
+type FormMode = "create" | "edit" | "view";
 type FormValue = Record<string, unknown>;
 type BuildPayloadOptions = {
   includeArrays?: boolean;
@@ -275,6 +280,41 @@ const getItemId = (item: FormValue): number | null => {
   return Number.isFinite(id) && id > 0 ? id : null;
 };
 
+const officeFieldKeys = [
+  "IdOficina",
+  "idOficina",
+  "OficinaId",
+  "oficinaId",
+  "id_oficina",
+];
+
+const findOfficeFieldKey = (record: FormValue): string | null => {
+  const normalizedKeys = officeFieldKeys.map(normalizeFieldKey);
+  return (
+    Object.keys(record).find((key) =>
+      normalizedKeys.includes(normalizeFieldKey(key))
+    ) ?? null
+  );
+};
+
+const getOfficeIdFromRecord = (record: FormValue): number | null => {
+  const raw = officeFieldKeys
+    .map((key) => getRecordValue(record, key))
+    .find((value) => value !== undefined && value !== null && value !== "");
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const isRecordInOwnOffice = (
+  item: FormValue,
+  capability: EntityCapability,
+  oficinaId: number | null
+): boolean => {
+  if (!capability.scopeToOwnOffice || !oficinaId) return true;
+  const recordOfficeId = getOfficeIdFromRecord(item);
+  return !recordOfficeId || recordOfficeId === oficinaId;
+};
+
 const getNestedRecordId = (value: unknown): number | null => {
   if (!isPlainObject(value)) return null;
 
@@ -433,6 +473,7 @@ type RelationComboFieldProps = {
   value: unknown;
   options: RelationOption[];
   onChange: (value: string) => void;
+  disabled?: boolean;
 };
 
 function RelationComboField({
@@ -440,6 +481,7 @@ function RelationComboField({
   value,
   options,
   onChange,
+  disabled = false,
 }: RelationComboFieldProps) {
   const selectedOption = options.find(
     (option) => String(option.value) === String(value)
@@ -473,9 +515,13 @@ function RelationComboField({
         value={query}
         placeholder="Digite para buscar"
         autoComplete="off"
-        onFocus={() => setIsOpen(true)}
+        disabled={disabled}
+        onFocus={() => {
+          if (!disabled) setIsOpen(true);
+        }}
         onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
         onChange={(event) => {
+          if (disabled) return;
           const nextQuery = event.target.value;
           setQuery(nextQuery);
           setIsOpen(true);
@@ -516,14 +562,22 @@ function RelationComboField({
 }
 
 export default function GerenciaPage() {
-  const { baseUrl, token, fullName, userName, oficinaId } = useAuth();
+  const { baseUrl, token, userRole, oficinaId } = useAuth();
   const entities = useMemo(
-    () => entityConfigs.filter((config) => managementKeys.includes(config.key)),
-    []
+    () =>
+      getAllowedManagementConfigs(
+        entityConfigs.filter((config) => managementKeys.includes(config.key)),
+        userRole,
+        oficinaId
+      ),
+    [oficinaId, userRole]
   );
-  const [selectedKey, setSelectedKey] = useState(entities[0]?.key ?? "");
+  const [selectedKey, setSelectedKey] = useState("");
   const selectedConfig =
     entities.find((config) => config.key === selectedKey) ?? entities[0];
+  const selectedCapability = selectedConfig
+    ? getEntityCapability(userRole, selectedConfig.key)
+    : null;
   const [items, setItems] = useState<FormValue[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -534,7 +588,7 @@ export default function GerenciaPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [lastCepLookup, setLastCepLookup] = useState("");
   const [formData, setFormData] = useState<FormValue>(() =>
-    cloneTemplate((entities[0] ?? entityConfigs[0]).template)
+    cloneTemplate(entityConfigs[0].template)
   );
   const [relationOptions, setRelationOptions] = useState<RelationOptionsMap>(
     {}
@@ -545,9 +599,18 @@ export default function GerenciaPage() {
     [token]
   );
 
+  useEffect(() => {
+    if (!entities.length) return;
+    if (!entities.some((config) => config.key === selectedKey)) {
+      setSelectedKey(entities[0].key);
+    }
+  }, [entities, selectedKey]);
+
   const applyLoggedOficina = (data: FormValue): FormValue => {
-    if (selectedConfig?.key !== "pedidos" || !oficinaId) return data;
-    return setAtPath(data, ["idOficina"], oficinaId) as FormValue;
+    if (!selectedCapability?.scopeToOwnOffice || !oficinaId) return data;
+    const officeField = findOfficeFieldKey(data);
+    if (!officeField) return data;
+    return setAtPath(data, [officeField], oficinaId) as FormValue;
   };
 
   const loadList = async (config: CrudConfig) => {
@@ -574,7 +637,12 @@ export default function GerenciaPage() {
       return;
     }
 
-    setItems(extractList(result.data));
+    const capability = getEntityCapability(userRole, config.key);
+    setItems(
+      extractList(result.data).filter((item) =>
+        isRecordInOwnOffice(item, capability, oficinaId)
+      )
+    );
     setIsLoading(false);
   };
 
@@ -599,7 +667,11 @@ export default function GerenciaPage() {
   };
 
   const loadRelationOptions = async () => {
-    const configs = entityConfigs.filter((config) => config.listPath);
+    const configs = getAllowedManagementConfigs(
+      entityConfigs.filter((config) => config.listPath),
+      userRole,
+      oficinaId
+    );
     const entries = await Promise.all(
       configs.map(async (config) => {
         const result = await fetchJson(baseUrl, config.listPath as string, {
@@ -609,7 +681,9 @@ export default function GerenciaPage() {
 
         if (!result.ok) return [config.key, []] as const;
 
+        const capability = getEntityCapability(userRole, config.key);
         const options = extractList(result.data)
+          .filter((item) => isRecordInOwnOffice(item, capability, oficinaId))
           .map((item) => {
             const id = getRecordId(item);
             if (!id) return null;
@@ -637,7 +711,7 @@ export default function GerenciaPage() {
     setSearchTerm("");
     setCurrentPage(1);
     loadList(selectedConfig);
-  }, [selectedConfig, baseUrl, token, oficinaId]);
+  }, [selectedConfig, baseUrl, token, oficinaId, userRole]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -646,17 +720,17 @@ export default function GerenciaPage() {
   useEffect(() => {
     if (!token) return;
     loadRelationOptions();
-  }, [baseUrl, token]);
+  }, [baseUrl, token, userRole, oficinaId]);
 
   const openCreateForm = () => {
-    if (!selectedConfig) return;
+    if (!selectedConfig || !selectedCapability?.canCreate) return;
     setFormMode("create");
     setEditingId(null);
     setFormData(applyLoggedOficina(cloneTemplate(selectedConfig.template)));
     setShowForm(true);
   };
 
-  const handleEdit = async (item: FormValue) => {
+  const handleEdit = async (item: FormValue, nextMode: FormMode = "edit") => {
     if (!selectedConfig) return;
     const id = getItemId(item);
     if (!id) return;
@@ -687,7 +761,7 @@ export default function GerenciaPage() {
       setIsLoading(false);
     }
 
-    setFormMode("edit");
+    setFormMode(nextMode);
     setEditingId(id);
     setFormData(
       applyLoggedOficina(mergeWithTemplate(selectedConfig.template, itemToEdit) as FormValue)
@@ -696,7 +770,7 @@ export default function GerenciaPage() {
   };
 
   const handleCreate = async () => {
-    if (!selectedConfig) return;
+    if (!selectedConfig || !selectedCapability?.canCreate) return;
     setIsLoading(true);
     setError(null);
     const result = await fetchJson(baseUrl, selectedConfig.createPath, {
@@ -758,7 +832,13 @@ export default function GerenciaPage() {
   };
 
   const handleUpdate = async () => {
-    if (!selectedConfig?.updatePath || !editingId) return;
+    if (
+      !selectedConfig?.updatePath ||
+      !editingId ||
+      !selectedCapability?.canUpdate
+    ) {
+      return;
+    }
     setIsLoading(true);
     setError(null);
     const result = await fetchJson(
@@ -791,7 +871,7 @@ export default function GerenciaPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!selectedConfig?.deletePath) return;
+    if (!selectedConfig?.deletePath || !selectedCapability?.canDelete) return;
     if (!window.confirm("Deseja realmente excluir este registro?")) return;
 
     setIsLoading(true);
@@ -885,7 +965,7 @@ export default function GerenciaPage() {
       if (
         isOwnIdField(key, path) ||
         (path.length === 0 &&
-          formMode === "edit" &&
+          formMode !== "create" &&
           shouldHideFieldForEntity(selectedConfig.key, key)) ||
         (autoParentField &&
           normalizeFieldKey(key) === normalizeFieldKey(autoParentField))
@@ -911,7 +991,7 @@ export default function GerenciaPage() {
                   Adicione e organize os itens vinculados.
                 </p>
               </div>
-              {itemTemplate ? (
+              {itemTemplate && formMode !== "view" ? (
                 <button
                   type="button"
                   className="sigo-button min-h-9 px-3 text-xs"
@@ -941,18 +1021,20 @@ export default function GerenciaPage() {
                     <p className="text-xs font-bold text-[var(--sigo-muted)]">
                       Item
                     </p>
-                    <button
-                      type="button"
-                      className="text-xs font-bold text-[var(--sigo-danger)]"
-                      onClick={() => {
-                        const nextItems = items.filter((_, idx) => idx !== index);
-                        setFormData((prev) =>
-                          setAtPath(prev, fieldPath, nextItems) as FormValue
-                        );
-                      }}
-                    >
-                      Remover
-                    </button>
+                    {formMode !== "view" ? (
+                      <button
+                        type="button"
+                        className="text-xs font-bold text-[var(--sigo-danger)]"
+                        onClick={() => {
+                          const nextItems = items.filter((_, idx) => idx !== index);
+                          setFormData((prev) =>
+                            setAtPath(prev, fieldPath, nextItems) as FormValue
+                          );
+                        }}
+                      >
+                        Remover
+                      </button>
+                    ) : null}
                   </div>
                   {itemTemplate && isPlainObject(item) ? (
                     <div className="grid gap-3 md:grid-cols-2">
@@ -994,12 +1076,12 @@ export default function GerenciaPage() {
       const fieldOptions = getFieldOptions(key, path);
       const relationEntityKey = getRelationEntityKey(key);
       const isLoggedOficinaField =
-        selectedConfig.key === "pedidos" && normalizeFieldKey(key) === "idoficina";
+        selectedCapability?.scopeToOwnOffice &&
+        Boolean(oficinaId) &&
+        ["idoficina", "oficinaid"].includes(normalizeFieldKey(key));
       const loggedOficinaLabel =
-        fullName ||
-        userName ||
         findRelationLabel(relationOptions, "idOficina", oficinaId) ||
-        "";
+        (oficinaId ? `Oficina #${oficinaId}` : "");
 
       if (isLoggedOficinaField) {
         return (
@@ -1025,6 +1107,7 @@ export default function GerenciaPage() {
             label={formatFieldLabel(key)}
             value={normalizedValue}
             options={relationOptions[relationEntityKey] ?? []}
+            disabled={formMode === "view"}
             onChange={(nextValue) =>
               handleFieldChange(fieldPath, templateValue, nextValue)
             }
@@ -1039,6 +1122,7 @@ export default function GerenciaPage() {
             <select
               className="sigo-input"
               value={String(normalizedValue)}
+              disabled={formMode === "view"}
               onChange={(event) =>
                 handleFieldChange(fieldPath, templateValue, event.target.value)
               }
@@ -1055,6 +1139,7 @@ export default function GerenciaPage() {
               className="sigo-input"
               type={getInputType(key, templateValue)}
               value={displayValue}
+              disabled={formMode === "view"}
               inputMode={
                 normalizeFieldKey(key).includes("cpf") ||
                 normalizeFieldKey(key).includes("cnpj") ||
@@ -1158,9 +1243,15 @@ export default function GerenciaPage() {
                   {filteredItems.length} de {items.length} registro(s).
                 </h2>
               </div>
-              <button type="button" className="sigo-button sigo-button-primary" onClick={openCreateForm}>
-                Criar
-              </button>
+              {selectedCapability?.canCreate ? (
+                <button
+                  type="button"
+                  className="sigo-button sigo-button-primary"
+                  onClick={openCreateForm}
+                >
+                  Criar
+                </button>
+              ) : null}
             </div>
 
             <div className="p-5">
@@ -1233,19 +1324,28 @@ export default function GerenciaPage() {
                                 <button
                                   type="button"
                                   className="sigo-button min-h-9 px-3 text-xs"
-                                  disabled={!selectedConfig.updatePath || !id}
-                                  onClick={() => handleEdit(item)}
+                                  disabled={!id}
+                                  onClick={() =>
+                                    handleEdit(
+                                      item,
+                                      selectedCapability?.canUpdate
+                                        ? "edit"
+                                        : "view"
+                                    )
+                                  }
                                 >
-                                  Editar
+                                  {selectedCapability?.canUpdate ? "Editar" : "Ver"}
                                 </button>
-                                <button
-                                  type="button"
-                                  className="sigo-button sigo-button-danger min-h-9 px-3 text-xs"
-                                  disabled={!selectedConfig.deletePath || !id}
-                                  onClick={() => id && handleDelete(id)}
-                                >
-                                  Excluir
-                                </button>
+                                {selectedCapability?.canDelete ? (
+                                  <button
+                                    type="button"
+                                    className="sigo-button sigo-button-danger min-h-9 px-3 text-xs"
+                                    disabled={!selectedConfig.deletePath || !id}
+                                    onClick={() => id && handleDelete(id)}
+                                  >
+                                    Excluir
+                                  </button>
+                                ) : null}
                               </div>
                             </td>
                           </tr>
@@ -1304,9 +1404,11 @@ export default function GerenciaPage() {
                   {selectedConfig.label}
                 </p>
                 <h2 className="mt-1 text-xl font-black text-white">
-                  {formMode === "edit"
-                    ? `Editar ${selectedConfig.label}`
-                    : `Criar ${selectedConfig.label}`}
+                  {formMode === "view"
+                    ? `Ver ${selectedConfig.label}`
+                    : formMode === "edit"
+                      ? `Editar ${selectedConfig.label}`
+                      : `Criar ${selectedConfig.label}`}
                 </h2>
 
               </div>
@@ -1338,20 +1440,25 @@ export default function GerenciaPage() {
                   className="sigo-button"
                   onClick={() => setShowForm(false)}
                 >
-                  Cancelar
+                  {formMode === "view" ? "Fechar" : "Cancelar"}
                 </button>
-                <button
-                  type="button"
-                  className="sigo-button sigo-button-primary"
-                  disabled={isLoading || (formMode === "edit" && !selectedConfig.updatePath)}
-                  onClick={formMode === "edit" ? handleUpdate : handleCreate}
-                >
-                  {isLoading
-                    ? "Salvando..."
-                    : formMode === "edit"
-                      ? "Salvar alterações"
-                      : "Criar registro"}
-                </button>
+                {formMode !== "view" ? (
+                  <button
+                    type="button"
+                    className="sigo-button sigo-button-primary"
+                    disabled={
+                      isLoading ||
+                      (formMode === "edit" && !selectedConfig.updatePath)
+                    }
+                    onClick={formMode === "edit" ? handleUpdate : handleCreate}
+                  >
+                    {isLoading
+                      ? "Salvando..."
+                      : formMode === "edit"
+                        ? "Salvar alteracoes"
+                        : "Criar registro"}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

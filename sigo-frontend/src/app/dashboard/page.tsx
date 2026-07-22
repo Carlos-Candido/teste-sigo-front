@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchJson } from "@/lib/api";
+import { getAllowedManagementConfigs, normalizeRole } from "@/lib/accessControl";
 import { entityConfigs } from "@/models/entityConfigs";
 import { routes } from "@/navigation/routes";
 import { NavBar } from "@/components/Sidebar/NavBar";
@@ -43,10 +44,15 @@ const extractList = (data: unknown): unknown[] => {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { baseUrl, token, userRole } = useAuth();
+  const { baseUrl, token, userRole, oficinaId } = useAuth();
   const configs = useMemo(
-    () => entityConfigs.filter((config) => dashboardKeys.includes(config.key)),
-    []
+    () =>
+      getAllowedManagementConfigs(
+        entityConfigs.filter((config) => dashboardKeys.includes(config.key)),
+        userRole,
+        oficinaId
+      ),
+    [oficinaId, userRole]
   );
   const [metrics, setMetrics] = useState<Metric[]>(
     configs.map((config) => ({
@@ -59,7 +65,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (userRole.toLowerCase() === "cliente") {
+    if (normalizeRole(userRole) === "cliente") {
       router.replace(routes.clientHome);
     }
   }, [router, userRole]);

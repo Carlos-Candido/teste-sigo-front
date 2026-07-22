@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { normalizeRole } from "@/lib/accessControl";
 import { routes } from "@/navigation/routes";
 
 function RouteLoading() {
@@ -35,7 +36,7 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
     if (!isReady) return;
     if (token) {
       router.replace(
-        userRole.toLowerCase() === "cliente" ? routes.clientHome : routes.dashboard
+        normalizeRole(userRole) === "cliente" ? routes.clientHome : routes.dashboard
       );
     }
   }, [isReady, router, token, userRole]);

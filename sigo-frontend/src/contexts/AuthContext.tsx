@@ -102,15 +102,63 @@ const getFullNameFromToken = (token: string): string => {
   return fullName;
 };
 
+const getEmailFromToken = (token: string): string => {
+  const payload = decodeJwtPayload(token);
+  return getStringClaim(payload, [
+    "email",
+    "Email",
+    "mail",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+  ]);
+};
+
+const getNumericClaim = (
+  payload: Record<string, unknown> | null,
+  names: string[]
+): number | null => {
+  if (!payload) return null;
+
+  for (const name of names) {
+    const rawValue = payload[name];
+    const parsed = Number(rawValue);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+
+  return null;
+};
+
+const getUserIdFromToken = (token: string): number | null => {
+  const payload = decodeJwtPayload(token);
+  return getNumericClaim(payload, [
+    "id",
+    "Id",
+    "ID",
+    "userId",
+    "UserId",
+    "usuarioId",
+    "UsuarioId",
+    "clienteId",
+    "ClienteId",
+    "funcionarioId",
+    "FuncionarioId",
+    "oficinaId",
+    "OficinaId",
+    "sub",
+    "nameid",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+    "http://schemas.microsoft.com/ws/2008/06/identity/claims/nameidentifier",
+  ]);
+};
+
 const getOficinaIdFromToken = (token: string): number | null => {
   const payload = decodeJwtPayload(token);
-  const rawValue =
-    payload?.oficina_id ??
-    payload?.OficinaId ??
-    payload?.oficinaId;
-
-  const parsed = Number(rawValue);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  return getNumericClaim(payload, [
+    "oficina_id",
+    "oficinaId",
+    "OficinaId",
+    "idOficina",
+    "IdOficina",
+  ]);
 };
 
 const getRoleFromToken = (token: string): string => {
@@ -207,6 +255,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => setToken("");
   const userName = useMemo(() => getFirstNameFromToken(token), [token]);
   const fullName = useMemo(() => getFullNameFromToken(token), [token]);
+  const userEmail = useMemo(() => getEmailFromToken(token), [token]);
+  const userId = useMemo(() => getUserIdFromToken(token), [token]);
   const userRole = useMemo(() => getRoleFromToken(token), [token]);
   const oficinaId = useMemo(() => getOficinaIdFromToken(token), [token]);
 
@@ -218,13 +268,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken,
       userName,
       fullName,
+      userEmail,
+      userId,
       userRole,
       oficinaId,
       login,
       logout,
       isReady,
     }),
-    [baseUrl, token, userName, fullName, userRole, oficinaId, isReady]
+    [
+      baseUrl,
+      token,
+      userName,
+      fullName,
+      userEmail,
+      userId,
+      userRole,
+      oficinaId,
+      isReady,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

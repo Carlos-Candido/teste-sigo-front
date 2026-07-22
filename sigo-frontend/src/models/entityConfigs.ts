@@ -216,6 +216,7 @@ export const entityConfigs: CrudConfig[] = [
       Cargo: "",
       Senha: "",
       Email: "",
+      IdOficina: 0,
       Situacao: 1,
     },
   },
@@ -250,6 +251,7 @@ export const entityConfigs: CrudConfig[] = [
       Descricao: "",
       Valor: 0,
       Garantia: "2026-01-01",
+      IdOficina: 0,
       Funcionario_Servicos: [funcionarioServicoTemplate],
     },
     listFields: servicoListFields,
@@ -274,6 +276,7 @@ export const entityConfigs: CrudConfig[] = [
       IdMarca: 0,
       DataAquisicao: "2026-01-01",
       Fornecedor: "",
+      IdOficina: 0,
     },
   },
   {
