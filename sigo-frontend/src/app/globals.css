@@ -121,6 +121,38 @@ textarea:disabled {
   margin-inline: auto;
 }
 
+.sigo-skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 80;
+  border-radius: 8px;
+  background: var(--sigo-blue-deep);
+  color: #ffffff;
+  font-weight: 800;
+  padding: 0.8rem 1rem;
+  transform: translateY(-140%);
+}
+
+.sigo-skip-link:focus {
+  transform: translateY(0);
+}
+
+.sigo-dot-item {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.sigo-dot-item::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  margin-top: 0.55rem;
+  border-radius: 999px;
+  background: var(--sigo-cyan);
+}
+
 .sigo-card {
   border: 1px solid var(--sigo-border);
   border-radius: 8px;

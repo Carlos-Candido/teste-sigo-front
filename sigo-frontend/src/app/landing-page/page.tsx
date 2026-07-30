@@ -1,65 +1,57 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
-import { WorkshopFlowAnimation } from "@/components/LandingPage/WorkshopFlowAnimation";
-import styles from "./landing-page.module.css";
+import { NavBar } from "@/components/Sidebar/NavBar";
+
+const highlights = [
+  {
+    title: "Ordens completas",
+    text: "Serviços, peças, valores, prazos e responsáveis reunidos no mesmo atendimento.",
+  },
+  {
+    title: "Histórico organizado",
+    text: "Clientes e veículos com registros claros para consultas rápidas da oficina.",
+  },
+  {
+    title: "Gestão mais simples",
+    text: "Equipe, estoque e relatórios organizados para reduzir retrabalho.",
+  },
+];
 
 const modules = [
-  {
-    title: "Ordens de serviço",
-    text: "Controle serviços, peças, valores, prazos, observações e responsáveis em um único registro.",
-  },
-  {
-    title: "Clientes e veículos",
-    text: "Mantenha histórico por cliente, placa, modelo, marca, chassi, quilometragem e atendimentos realizados.",
-  },
-  {
-    title: "Estoque de peças",
-    text: "Acompanhe peças, fornecedores, quantidades, garantias, valores e vínculo com pedidos.",
-  },
-  {
-    title: "Equipe da oficina",
-    text: "Organize funcionários, cargos, serviços executados e participação em cada atendimento.",
-  },
-  {
-    title: "Relatórios gerenciais",
-    text: "Filtre dados por período, cliente, veículo, status, pagamento, serviços e peças.",
-  },
-  {
-    title: "Área do cliente",
-    text: "Ofereça transparência para acompanhar pedidos, histórico de manutenção e custos do veículo.",
-  },
+  "Clientes e veículos",
+  "Ordens de serviço",
+  "Peças e estoque",
+  "Equipe da oficina",
+  "Relatórios",
+  "Área do cliente",
+];
+
+const benefits = [
+  "Clientes, veículos e oficinas em um só lugar",
+  "Pedidos com serviços, peças e status acompanháveis",
+  "Relatórios para decisões mais rápidas",
+  "Acesso web para oficina, funcionário e cliente",
 ];
 
 const audiences = [
   {
     role: "Oficinas",
-    value: "centralizam operação, estoque e atendimento sem depender de planilhas soltas.",
+    text: "centralizam atendimentos, estoque e equipe em uma rotina mais organizada.",
   },
   {
     role: "Funcionários",
-    value: "consultam pedidos, veículos, peças e serviços com menos retrabalho.",
+    text: "consultam pedidos, veículos, peças e serviços sem depender de registros soltos.",
   },
   {
     role: "Clientes",
-    value: "acompanham o histórico do veículo e entendem melhor o que foi realizado.",
+    text: "acompanham o histórico do veículo com mais clareza sobre serviços e custos.",
   },
 ];
 
-const outcomes = [
-  "Menos retrabalho administrativo",
-  "Mais clareza no histórico de manutenção",
-  "Controle de peças e serviços por pedido",
-  "Dados organizados para tomada de decisão",
-  "Comunicação mais transparente com o cliente",
-  "Acesso web para diferentes perfis de usuário",
-];
-
 const steps = [
-  "Cadastre clientes, oficinas, funcionários e veículos",
-  "Abra pedidos com serviços, peças e responsáveis",
-  "Acompanhe status, custos e histórico em tempo real",
-  "Use relatórios para melhorar decisões da oficina",
+  "Cadastre clientes, veículos e equipe",
+  "Abra pedidos com serviços e peças",
+  "Acompanhe status, custos e histórico",
 ];
 
 export const metadata: Metadata = {
@@ -82,208 +74,154 @@ export const metadata: Metadata = {
 
 export default function LandingPage() {
   return (
-    <main className={styles.page}>
-      <a className={styles.skipLink} href="#conteudo">
+    <div className="sigo-page">
+      <a className="sigo-skip-link" href="#conteudo">
         Pular para o conteúdo
       </a>
 
-      <header className={styles.header}>
-        <Link className={styles.brand} href="/landing-page" aria-label="SIGO">
-          <Image
-            src="/sigo-logo.png"
-            alt="Logo SIGO"
-            width={52}
-            height={52}
-            className={styles.logo}
-          />
-          <span>
-            <strong>SIGO</strong>
-            <small>Sistema de gestão de oficinas</small>
-          </span>
-        </Link>
+      <NavBar />
 
-        <nav className={styles.nav} aria-label="Navegação da landing page">
-          <a href="#modulos">Módulos</a>
-          <a href="#fluxo">Fluxo</a>
-          <a href="#beneficios">Benefícios</a>
-        </nav>
+      <main className="sigo-shell grid gap-8 py-8 lg:gap-10 lg:py-10">
+        <section
+          id="conteudo"
+          className="grid items-center gap-7 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:py-8"
+          aria-labelledby="hero-title"
+        >
+          <div className="max-w-3xl">
+            <h1
+              id="hero-title"
+              className="mt-4 max-w-4xl text-5xl font-black leading-[1.05] text-[var(--sigo-blue-deep)] sm:text-6xl lg:text-7xl"
+            >
+              Gestão de oficinas simples e centralizada.
+            </h1>
+            <p className="mt-5 max-w-2xl text-base font-semibold leading-7 text-[var(--sigo-muted)] sm:text-lg">
+              Controle clientes, veículos, pedidos, peças e relatórios
+              em uma plataforma web objetiva para a rotina da oficina.
+            </p>
 
-        <Link className={styles.navButton} href="/login">
-          Entrar
-        </Link>
-      </header>
-
-      <section id="conteudo" className={styles.hero} aria-labelledby="hero-title">
-        <div className={styles.heroCopy}>
-          <span className={styles.eyebrow}>Projeto Integrador Fatec Jales</span>
-          <h1 id="hero-title">Gestão de oficinas com ordens, veículos e peças no mesmo lugar.</h1>
-          <p>
-            O SIGO moderniza o atendimento de oficinas mecânicas ao centralizar
-            clientes, veículos, ordens de serviço, estoque, equipe e relatórios
-            em uma plataforma web objetiva.
-          </p>
-
-          <div className={styles.heroActions}>
-            <Link className={styles.primaryButton} href="/cadastro">
-              Criar acesso
-            </Link>
-            <Link className={styles.secondaryButton} href="/login">
-              Entrar no sistema
-            </Link>
-          </div>
-
-          <dl className={styles.metrics} aria-label="Destaques do SIGO">
-            <div>
-              <dt>Perfis</dt>
-              <dd>Oficina, funcionário e cliente</dd>
-            </div>
-            <div>
-              <dt>Controle</dt>
-              <dd>OS, peças, veículos e serviços</dd>
-            </div>
-            <div>
-              <dt>Foco</dt>
-              <dd>Eficiência e transparência</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className={styles.productVisual} aria-label="Prévia visual do painel SIGO">
-          <div className={styles.dashboardShell}>
-            <div className={styles.dashboardTop}>
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className={styles.dashboardBody}>
-              <aside>
-                <strong>SIGO</strong>
-                <span>Pedidos</span>
-                <span>Veículos</span>
-                <span>Clientes</span>
-                <span>Peças</span>
-              </aside>
-              <section>
-                <div className={styles.panelTitle}>
-                  <span>Ordem #2481</span>
-                  <strong>Em andamento</strong>
-                </div>
-                <div className={styles.progressLine}>
-                  <span />
-                </div>
-                <div className={styles.dataGrid}>
-                  <div>
-                    <small>Cliente</small>
-                    <strong>Mariana Alves</strong>
-                  </div>
-                  <div>
-                    <small>Veículo</small>
-                    <strong>HB20 2021</strong>
-                  </div>
-                  <div>
-                    <small>Peças</small>
-                    <strong>3 itens</strong>
-                  </div>
-                  <div>
-                    <small>Serviço</small>
-                    <strong>Revisão completa</strong>
-                  </div>
-                </div>
-              </section>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Link className="sigo-button sigo-button-primary sm:min-w-36" href="/cadastro">
+                Criar acesso
+              </Link>
+              <Link className="sigo-button sm:min-w-40" href="/login">
+                Entrar no sistema
+              </Link>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="modulos" className={styles.section} aria-labelledby="modulos-title">
-        <div className={styles.sectionHeader}>
-          <span className={styles.eyebrow}>Módulos principais</span>
-          <h2 id="modulos-title">Tudo que a oficina precisa acompanhar sem perder informação.</h2>
-          <p>
-            A documentação do projeto define um sistema integrado para substituir
-            processos manuais, planilhas dispersas e registros desconectados.
-          </p>
-        </div>
+        <section className="grid gap-5" aria-labelledby="destaques-title">
+          <div className="max-w-2xl">
+            <h2
+              id="destaques-title"
+              className="mt-3 text-3xl font-black leading-tight text-[var(--sigo-blue-deep)] sm:text-4xl"
+            >
+              O essencial para acompanhar a oficina.
+            </h2>
+          </div>
 
-        <div className={styles.moduleGrid}>
-          {modules.map((module) => (
-            <article className={styles.moduleCard} key={module.title}>
-              <h3>{module.title}</h3>
-              <p>{module.text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+          <div className="grid gap-4 md:grid-cols-3">
+            {highlights.map((highlight) => (
+              <article className="sigo-card bg-white/80 p-5" key={highlight.title}>
+                <h3 className="text-lg font-black text-[var(--sigo-blue-deep)]">
+                  {highlight.title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-[var(--sigo-muted)]">
+                  {highlight.text}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
 
-      <div id="fluxo">
-        <WorkshopFlowAnimation />
-      </div>
+        <section className="sigo-card overflow-hidden bg-white/85" aria-labelledby="modulos-title">
+          <div className="border-b border-[var(--sigo-border)] p-5 sm:p-6">
+            <p className="text-sm font-black uppercase text-[var(--sigo-blue)]">
+              Módulos principais
+            </p>
+            <h2
+              id="modulos-title"
+              className="mt-2 text-2xl font-black leading-tight text-[var(--sigo-blue-deep)] sm:text-3xl"
+            >
+              Uma base integrada para a rotina da oficina.
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--sigo-muted)]">
+              O SIGO organiza os dados que antes ficavam em planilhas, papéis ou
+              controles separados, mantendo o atendimento mais fácil de acompanhar.
+            </p>
+          </div>
 
-      <section className={styles.section} aria-labelledby="publicos-title">
-        <div className={styles.sectionHeader}>
-          <span className={styles.eyebrow}>Acesso por perfil</span>
-          <h2 id="publicos-title">Cada usuário enxerga o que precisa para trabalhar melhor.</h2>
-        </div>
+          <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
+            {modules.map((module) => (
+              <div className="sigo-card-soft p-4" key={module}>
+                <span className="text-sm font-black text-[var(--sigo-blue-deep)]">
+                  {module}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
 
-        <div className={styles.audienceGrid}>
-          {audiences.map((audience) => (
-            <article key={audience.role}>
-              <span>{audience.role}</span>
-              <p>{audience.value}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+        <section className="grid gap-4 lg:grid-cols-[1fr_1fr]" aria-label="Públicos e funcionamento">
+          <div className="sigo-card bg-white/85 p-5 sm:p-6">
+            <p className="text-sm font-black uppercase text-[var(--sigo-blue)]">
+              Acesso por perfil
+            </p>
+            <div className="mt-5 grid gap-4">
+              {audiences.map((audience) => (
+                <article key={audience.role}>
+                  <h3 className="text-lg font-black text-[var(--sigo-blue-deep)]">
+                    {audience.role}
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-[var(--sigo-muted)]">
+                    {audience.text}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
 
-      <section id="beneficios" className={styles.benefitsSection} aria-labelledby="beneficios-title">
-        <div className={styles.sectionHeader}>
-          <span className={styles.eyebrow}>Impacto esperado</span>
-          <h2 id="beneficios-title">Mais organização para a oficina e mais confiança para o cliente.</h2>
-          <p>
-            O SIGO foi pensado para reduzir burocracia, melhorar a rastreabilidade
-            das manutenções e apoiar decisões com dados mais confiáveis.
-          </p>
-        </div>
+          <div className="sigo-card bg-white/85 p-5 sm:p-6">
+            <p className="text-sm font-black uppercase text-[var(--sigo-blue)]">
+              Como funciona
+            </p>
+            <ol className="mt-5 grid gap-3">
+              {steps.map((step, index) => (
+                <li className="flex gap-3" key={step}>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--sigo-surface-blue)] text-sm font-black text-[var(--sigo-blue)]">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <strong className="pt-1 text-sm leading-6 text-[var(--sigo-blue-deep)]">
+                    {step}
+                  </strong>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
 
-        <ul className={styles.outcomeList}>
-          {outcomes.map((outcome) => (
-            <li key={outcome}>{outcome}</li>
-          ))}
-        </ul>
-      </section>
-
-      <section className={styles.section} aria-labelledby="como-funciona">
-        <div className={styles.sectionHeader}>
-          <span className={styles.eyebrow}>Como funciona</span>
-          <h2 id="como-funciona">Um fluxo simples para informatizar a rotina da oficina.</h2>
-        </div>
-
-        <ol className={styles.steps}>
-          {steps.map((step, index) => (
-            <li key={step}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{step}</strong>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className={styles.finalCta} aria-labelledby="cta-title">
-        <span className={styles.eyebrow}>SIGO</span>
-        <h2 id="cta-title">Leve a gestão da oficina para um ambiente web centralizado.</h2>
-        <p>
-          Use a página de cadastro para criar o acesso ou entre no sistema para
-          gerenciar clientes, veículos, pedidos, peças e relatórios.
-        </p>
-        <div className={styles.heroActions}>
-          <Link className={styles.primaryButton} href="/cadastro">
-            Começar cadastro
-          </Link>
-          <Link className={styles.secondaryButton} href="/login">
-            Acessar login
-          </Link>
-        </div>
-      </section>
-    </main>
+        <section className="pb-10">
+          <div className="sigo-card grid gap-4 bg-white/85 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div>
+              <h2 className="text-2xl font-black leading-tight text-[var(--sigo-blue-deep)]">
+                Pronto para informatizar sua oficina?
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--sigo-muted)]">
+                Crie um acesso para cadastrar clientes e oficinas ou entre para
+                gerenciar pedidos, peças, serviços e relatórios.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link className="sigo-button sigo-button-primary" href="/cadastro">
+                Começar cadastro
+              </Link>
+              <Link className="sigo-button" href="/login">
+                Acessar login
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }
