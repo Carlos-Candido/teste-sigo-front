@@ -23,7 +23,7 @@ const extractLoginError = (data: unknown): string | null => {
 export default function LoginPage() {
   const router = useRouter();
   const { login, userRole } = useAuth();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +33,7 @@ export default function LoginPage() {
     setError(null);
     setIsLoading(true);
 
-    const result = await login({ email, password });
+    const result = await login({ email: identifier, password });
     if (result.ok) {
       router.replace(
         userRole.toLowerCase() === "cliente" ? routes.clientHome : routes.dashboard
@@ -102,10 +102,10 @@ export default function LoginPage() {
 
           <form className="grid gap-5 p-6" onSubmit={handleSubmit}>
             <TextInput
-              label="Email"
-              value={email}
-              onChange={setEmail}
-              type="email"
+              label="CPF/CNPJ ou E-mail"
+              value={identifier}
+              onChange={setIdentifier}
+              placeholder="Cliente: CPF/CNPJ | Oficina/funcionario: e-mail"
             />
             <TextInput
               label="Senha"

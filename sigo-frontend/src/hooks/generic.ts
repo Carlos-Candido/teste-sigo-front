@@ -2,6 +2,7 @@ import { authStorage } from "@/lib/auth-storage";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://localhost:7241";
+const API_PREFIX = "/api/v1";
 
 export interface ResponseEnvelope<T> {
   code?: string | number;
@@ -91,7 +92,8 @@ export class GenericService<T> {
   }
 
   protected getUrlEndpoint(): string {
-    return `${BASE_URL}/${this.endpoint}`;
+    const normalizedEndpoint = this.endpoint.replace(/^\/?api\/v1\//, "").replace(/^\/?api\//, "");
+    return `${BASE_URL}${API_PREFIX}/${normalizedEndpoint}`;
   }
 
   protected createHeaders(init?: HeadersInit): Headers {
@@ -128,6 +130,10 @@ export class GenericService<T> {
 
     if (Array.isArray(data)) return data as R[];
     if (isPaginatedResult<R>(data)) return data.items;
+    if (isRecord(data)) {
+      const items = data.items;
+      if (Array.isArray(items)) return items as R[];
+    }
     return [];
   }
 
@@ -140,6 +146,15 @@ export class GenericService<T> {
     const size = query?.size ?? DEFAULT_LIST_QUERY.size;
 
     if (isPaginatedResult<R>(data)) return data;
+    if (isRecord(data) && Array.isArray(data.items)) {
+      return {
+        items: data.items as R[],
+        totalRecords: typeof data.totalItems === "number" ? data.totalItems : data.items.length,
+        totalPages: typeof data.totalPages === "number" ? data.totalPages : 0,
+        currentPage: typeof data.page === "number" ? data.page : 1,
+        pageSize: typeof data.pageSize === "number" ? data.pageSize : data.items.length,
+      };
+    }
 
     const items = Array.isArray(data) ? (data as R[]) : [];
     const totalRecords = items.length;

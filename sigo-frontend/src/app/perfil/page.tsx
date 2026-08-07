@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { DashboardTabs } from "@/components/Dashboard/DashboardTabs";
 import { NavBar } from "@/components/Sidebar/NavBar";
 import { ProtectedRoute } from "@/components/Auth/RouteGuards";
@@ -17,6 +18,8 @@ import {
 import {
   formatCep,
   formatCpfCnpj,
+  formatDdd,
+  formatPhone,
   getEnumOptions,
   isOwnIdField,
   isStateField,
@@ -153,6 +156,15 @@ const setAtPath = (
   };
 };
 
+const getAtPath = (source: unknown, path: Array<string | number>): unknown =>
+  path.reduce<unknown>((current, segment) => {
+    if (Array.isArray(current)) {
+      return current[typeof segment === "number" ? segment : Number(segment)];
+    }
+    if (isPlainObject(current)) return current[segment as string];
+    return undefined;
+  }, source);
+
 const formatFieldLabel = (key: string): string => {
   const mapped = fieldLabels[normalizeFieldKey(key)];
   if (mapped) return mapped;
@@ -164,7 +176,9 @@ const formatFieldLabel = (key: string): string => {
 
 const getInputType = (key: string, templateValue: unknown): string => {
   const normalized = normalizeFieldKey(key);
-  if (normalized === "cep" || normalized.includes("cpf")) return "text";
+  if (normalized === "cep" || normalized === "ddd" || normalized.includes("cpf")) {
+    return "text";
+  }
   if (normalized.includes("senha")) return "password";
   if (normalized.includes("email")) return "email";
   if (typeof templateValue === "number") return "number";
@@ -177,17 +191,56 @@ const getInputType = (key: string, templateValue: unknown): string => {
   return "text";
 };
 
+const isPhonePath = (path: Array<string | number>): boolean =>
+  path.some(
+    (segment) =>
+      typeof segment === "string" && normalizeFieldKey(segment) === "telefones"
+  );
+
+const isPhoneNumberField = (
+  key: string,
+  path: Array<string | number>
+): boolean => {
+  const normalized = normalizeFieldKey(key);
+  return isPhonePath(path) && (normalized === "numero" || normalized.includes("telefone"));
+};
+
+const isPhoneDddField = (key: string, path: Array<string | number>): boolean =>
+  isPhonePath(path) && normalizeFieldKey(key) === "ddd";
+
+const formatLocalPhone = (value: unknown): string => {
+  const digits = onlyDigits(value).slice(0, 9);
+  if (digits.length <= 8) {
+    return digits.replace(/^(\d{4})(\d)/, "$1-$2");
+  }
+  return digits.replace(/^(\d{5})(\d)/, "$1-$2");
+};
+
 const getFieldOptions = (key: string): SelectOption[] | null => {
   if (isStateField(key)) return stateOptions;
   return getEnumOptions(key);
 };
 
-const displayValue = (key: string, value: unknown): string => {
+const displayValue = (
+  key: string,
+  value: unknown,
+  path: Array<string | number> = []
+): string => {
   const normalized = normalizeFieldKey(key);
+  const enumOptions = getEnumOptions(key);
+  if (enumOptions) {
+    const stringValue = String(value ?? "");
+    return (
+      enumOptions.find((option) => String(option.value) === stringValue)?.label ??
+      stringValue
+    );
+  }
   if (normalized === "cep") return formatCep(value);
   if (normalized.includes("cpf") || normalized.includes("cnpj")) {
     return formatCpfCnpj(value);
   }
+  if (isPhoneNumberField(key, path)) return formatLocalPhone(value);
+  if (isPhoneDddField(key, path)) return formatDdd(value);
   return String(value ?? "");
 };
 
@@ -227,6 +280,8 @@ export default function PerfilPage() {
 
   const resolvedProfileId =
     normalizedRole === "oficina" ? oficinaId ?? userId : userId;
+  const homeRoute =
+    normalizedRole === "cliente" ? routes.clientHome : routes.dashboard;
 
   useEffect(() => {
     let isMounted = true;
@@ -302,6 +357,19 @@ export default function PerfilPage() {
       nextValue = formatCep(value);
     } else if (normalized.includes("cpf") || normalized.includes("cnpj")) {
       nextValue = formatCpfCnpj(value);
+    } else if (isPhoneNumberField(key, path)) {
+      const digits = onlyDigits(value).slice(0, 11);
+      const parentPath = path.slice(0, -1);
+      const ddd = digits.slice(0, 2);
+      const number = digits.slice(2);
+      setFormData((prev) => {
+        let next = setAtPath(prev, path, formatLocalPhone(number));
+        next = setAtPath(next, [...parentPath, "DDD"], ddd);
+        return next as FormValue;
+      });
+      return;
+    } else if (isPhoneDddField(key, path)) {
+      nextValue = formatDdd(value);
     } else if (typeof templateValue === "number") {
       const parsed = Number(value);
       nextValue = Number.isNaN(parsed) ? templateValue : parsed;
@@ -347,7 +415,9 @@ export default function PerfilPage() {
       const itemTemplate = template[0];
       const items = Array.isArray(value) ? value : [];
       if (!itemTemplate) return items;
-      return items.map((item) => buildPayload(itemTemplate, item, path));
+      return items.map((item, index) =>
+        buildPayload(itemTemplate, item, [...path, index])
+      );
     }
 
     if (isPlainObject(template)) {
@@ -357,9 +427,21 @@ export default function PerfilPage() {
       Object.keys(template).forEach((key) => {
         const isTopLevel = path.length === 0;
         if (isTopLevel && !isAllowedField(editableFields, key)) return;
-        if (isOwnIdField(key)) return;
 
         const normalized = normalizeFieldKey(key);
+        if (isOwnIdField(key)) {
+          if (isPhonePath(path)) {
+            const rawId = getRecordValue(recordValue, key);
+            const parsedId = Number(rawId);
+            if (Number.isFinite(parsedId) && parsedId > 0) {
+              result[key] = parsedId;
+            }
+          }
+          return;
+        }
+
+        if (isPhonePath(path) && normalized === "clienteid") return;
+
         if (normalized === "clienteid" && normalizedRole === "cliente" && profileId) {
           result[key] = profileId;
           return;
@@ -382,10 +464,22 @@ export default function PerfilPage() {
         if (payloadValue !== undefined) result[key] = payloadValue;
       });
 
+      if (path.length === 0 && normalizedRole === "cliente") {
+        ["Email", "Cpf_Cnpj", "TipoCliente"].forEach((field) => {
+          if (!(field in template) || field in result) return;
+          result[field] = normalizeSubmitValue(
+            field,
+            template[field],
+            getRecordValue(recordValue, field)
+          );
+        });
+      }
+
       return result;
     }
 
     const key = String(path[path.length - 1] ?? "");
+    if (isPhoneNumberField(key, path)) return onlyDigits(value);
     return normalizeSubmitValue(key, template, value);
   };
 
@@ -441,6 +535,17 @@ export default function PerfilPage() {
     const isPasswordField = normalizeFieldKey(key).includes("senha");
     const normalizedValue =
       value === undefined || value === null ? templateValue ?? "" : value;
+    const parentValue = getAtPath(formData, path.slice(0, -1));
+    const phoneDisplayValue = (() => {
+      if (!isPhoneNumberField(key, path)) return null;
+      const ddd = isPlainObject(parentValue) ? getRecordValue(parentValue, "DDD") : "";
+      const numberDigits = onlyDigits(normalizedValue);
+      const digits =
+        numberDigits.length > 9 ? numberDigits : `${onlyDigits(ddd)}${numberDigits}`;
+      return formatPhone(digits);
+    })();
+    const fieldDisplayValue =
+      phoneDisplayValue ?? displayValue(key, normalizedValue, path);
 
     return (
       <label
@@ -466,13 +571,19 @@ export default function PerfilPage() {
             <input
               className="sigo-input"
               type={getInputType(key, templateValue)}
-              value={isPasswordField ? String(value ?? "") : displayValue(key, normalizedValue)}
+              value={
+                isPasswordField
+                  ? String(value ?? "")
+                  : fieldDisplayValue
+              }
               onChange={(event) => updateField(path, templateValue, event.target.value)}
             />
           )
         ) : (
           <span className="min-h-11 rounded-lg border border-[var(--sigo-border)] bg-white px-3 py-3 text-sm font-bold text-[var(--sigo-text)]">
-            {isPasswordField ? "Nao alterada" : displayValue(key, normalizedValue) || "-"}
+            {isPasswordField
+              ? "Nao alterada"
+              : fieldDisplayValue || "-"}
           </span>
         )}
       </label>
@@ -543,7 +654,7 @@ export default function PerfilPage() {
                   {Object.keys(itemTemplate)
                     .filter((field) => {
                       const normalized = normalizeFieldKey(field);
-                      return !["id", "clienteid"].includes(normalized);
+                      return !["id", "clienteid", "ddd"].includes(normalized);
                     })
                     .map((field) =>
                       renderScalarField(
@@ -630,22 +741,30 @@ export default function PerfilPage() {
               <>
                 <div className="grid gap-4 md:grid-cols-2">{renderFields()}</div>
                 {isEditing ? (
-                  <div className="mt-6 flex flex-col-reverse gap-3 border-t border-[var(--sigo-border)] pt-5 sm:flex-row sm:items-center sm:justify-end">
-                    <button
-                      type="button"
-                      className="sigo-button"
-                      onClick={() => setIsEditing(false)}
+                  <div className="mt-6 flex flex-col gap-3 border-t border-[var(--sigo-border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
+                    <Link
+                      className="text-sm font-bold text-[var(--sigo-muted)] hover:text-[var(--sigo-blue)]"
+                      href={homeRoute}
                     >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      className="sigo-button sigo-button-primary"
-                      onClick={handleUpdate}
-                      disabled={isLoading || !profileId}
-                    >
-                      Salvar alteracoes
-                    </button>
+                      Voltar para pagina principal
+                    </Link>
+                    <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+                      <button
+                        type="button"
+                        className="sigo-button"
+                        onClick={() => setIsEditing(false)}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="sigo-button sigo-button-primary"
+                        onClick={handleUpdate}
+                        disabled={isLoading || !profileId}
+                      >
+                        Salvar alteracoes
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </>

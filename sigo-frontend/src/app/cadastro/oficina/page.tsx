@@ -170,13 +170,21 @@ export default function CadastroOficinaPage() {
     setError(null);
     setIsLoading(true);
 
+    const senha = formData.Senha.trim();
+    if (!senha) {
+      setError("Informe a senha da oficina.");
+      setIsLoading(false);
+      return;
+    }
+
     const payload = {
       ...formData,
       CNPJ: onlyDigits(formData.CNPJ),
       Cep: Number(onlyDigits(formData.Cep) || 0),
+      Senha: senha,
     };
 
-    const result = await fetchJson(baseUrl, "/api/oficinas", {
+    const result = await fetchJson(baseUrl, "/api/v1/oficinas", {
       method: "POST",
       body: payload,
     });

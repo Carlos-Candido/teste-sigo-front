@@ -91,11 +91,11 @@ export default function ClientePage() {
       setError(null);
 
       const [vehiclesResult, ordersResult] = await Promise.all([
-        fetchJson(baseUrl, "/api/veiculos", {
+        fetchJson(baseUrl, "/api/v1/veiculos", {
           method: "GET",
           headers: authHeaders,
         }),
-        fetchJson(baseUrl, "/api/pedidos", {
+        fetchJson(baseUrl, "/api/v1/pedidos", {
           method: "GET",
           headers: authHeaders,
         }),

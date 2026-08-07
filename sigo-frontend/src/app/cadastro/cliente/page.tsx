@@ -238,7 +238,7 @@ export default function CadastroClientePage() {
       })),
     };
 
-    const result = await fetchJson(baseUrl, "/api/clientes", {
+    const result = await fetchJson(baseUrl, "/api/v1/clientes", {
       method: "POST",
       body: payload,
     });

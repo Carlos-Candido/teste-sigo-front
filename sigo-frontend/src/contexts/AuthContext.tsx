@@ -11,11 +11,8 @@ const defaultBaseUrl =
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-const loginRoutes = [
-  "/api/clientes/login",
-  "/api/oficinas/login",
-  "/api/funcionarios/login",
-];
+const customerLoginRoutes = ["/api/v1/clientes/login"];
+const staffLoginRoutes = ["/api/v1/oficinas/login", "/api/v1/funcionarios/login"];
 
 const sanitizeToken = (value: string): string =>
   value.trim().replace(/^Bearer\s+/i, "").replace(/^"|"$/g, "");
@@ -201,36 +198,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (payload: AuthLoginPayload): Promise<ApiResult> => {
-    const normalizedEmail = payload.email.trim().toLowerCase();
+    const normalizedIdentifier = payload.email.trim();
+    const isEmailIdentifier = normalizedIdentifier.includes("@");
+    const loginRoutes = isEmailIdentifier ? staffLoginRoutes : customerLoginRoutes;
     let lastResult: ApiResult | null = null;
 
     for (const route of loginRoutes) {
+      const isClienteRoute = route.includes("/clientes/");
       const result = await fetchJson(baseUrl, route, {
         method: "POST",
-        body: {
-          email: normalizedEmail,
-          password: payload.password,
-        },
+        body: isClienteRoute
+          ? {
+              cpf: normalizedIdentifier.replace(/\D/g, ""),
+              senha: payload.password,
+            }
+          : {
+              email: normalizedIdentifier.toLowerCase(),
+              password: payload.password,
+            },
       });
       lastResult = result;
 
       if (result.ok && typeof result.data === "object" && result.data) {
         const pickToken = (value: unknown): string | null => {
           if (!value || typeof value !== "object") return null;
-          const record = value as { token?: string; Token?: string };
-          return record.token ?? record.Token ?? null;
+          const record = value as {
+            token?: string;
+            Token?: string;
+            accessToken?: string;
+            AccessToken?: string;
+          };
+          return record.accessToken ?? record.AccessToken ?? record.token ?? record.Token ?? null;
         };
         const envelope = result.data as {
-          data?: { token?: string; Token?: string } | string | null;
-          Data?: { Token?: string; token?: string } | string | null;
+          data?: { token?: string; Token?: string; accessToken?: string; AccessToken?: string } | string | null;
+          Data?: { Token?: string; token?: string; accessToken?: string; AccessToken?: string } | string | null;
           token?: string;
           Token?: string;
+          accessToken?: string;
+          AccessToken?: string;
         };
         const tokenValue =
           (typeof envelope.data === "string" ? envelope.data : null) ??
           (typeof envelope.Data === "string" ? envelope.Data : null) ??
           pickToken(envelope.data) ??
           pickToken(envelope.Data) ??
+          envelope.accessToken ??
+          envelope.AccessToken ??
           envelope.token ??
           envelope.Token ??
           "";

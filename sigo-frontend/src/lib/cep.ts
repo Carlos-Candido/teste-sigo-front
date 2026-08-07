@@ -29,7 +29,7 @@ export const fetchCepAddress = async (
   const digits = onlyDigits(cep);
   if (digits.length !== 8) return null;
 
-  const result = await fetchJson(baseUrl, `/api/ceps/${digits}`, {
+  const result = await fetchJson(baseUrl, `/api/v1/ceps/${digits}`, {
     method: "GET",
     headers,
   });

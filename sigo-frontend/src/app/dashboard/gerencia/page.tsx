@@ -9,6 +9,7 @@ import { entityConfigs } from "@/models/entityConfigs";
 import {
   getAllowedManagementConfigs,
   getEntityCapability,
+  normalizeRole,
   type EntityCapability,
 } from "@/lib/accessControl";
 import { DashboardTabs } from "@/components/Dashboard/DashboardTabs";
@@ -21,6 +22,7 @@ import {
   formatCpf,
   formatCpfCnpj,
   formatCnpj,
+  formatPhone,
   formatEnumValue,
   formatStateValue,
   getEnumOptions,
@@ -31,6 +33,7 @@ import {
   maskFieldValue,
   normalizeFieldKey,
   normalizeSubmitValue,
+  onlyDigits,
   stateOptions,
   type RelationOption,
   type RelationOptionsMap,
@@ -45,6 +48,12 @@ type BuildPayloadOptions = {
   parentListKey?: string;
   entityKey?: string;
   formMode?: FormMode;
+};
+
+type SavedImagePreview = {
+  id: string;
+  label: string;
+  url: string;
 };
 
 const managementKeys = [
@@ -66,6 +75,10 @@ const parentIdFieldByList: Record<string, string> = {
   pedidoservicos: "IdPedido",
 };
 
+const hiddenFieldByList: Record<string, string[]> = {
+  telefones: ["DDD"],
+};
+
 const partConditionOptions: SelectOption[] = [
   { value: "Nova", label: "Nova" },
   { value: "Usada", label: "Usada" },
@@ -78,11 +91,22 @@ const hiddenFieldByEntity: Record<string, string[]> = {
   funcionarios: ["senha"],
 };
 
+const imageUploadPathByEntity: Record<string, (id: number) => string> = {
+  veiculos: (id) => `/api/v1/veiculos/${id}/imagens`,
+};
+
+const imageListFieldByEntity: Record<string, string> = {
+  veiculos: "Imagens",
+};
+
 const shouldHideFieldForEntity = (entityKey: string, key: string): boolean =>
   (hiddenFieldByEntity[entityKey] ?? []).includes(normalizeFieldKey(key));
 
 const shouldCreateWithArrays = (entityKey: string): boolean =>
   entityKey === "servicos";
+
+const getDeleteActionLabel = (entityKey: string): string =>
+  entityKey === "clientes" ? "Inativar" : "Excluir";
 
 const fieldLabels: Record<string, string> = {
   id: "ID",
@@ -93,7 +117,7 @@ const fieldLabels: Record<string, string> = {
   cnpj: "CNPJ",
   cpfcnpj: "CPF/CNPJ",
   obs: "Observação",
-  razao: "Razão social",
+  razao: "Razão",
   datanasc: "Data de nascimento",
   numero: "Número",
   rua: "Rua",
@@ -245,7 +269,12 @@ const buildPayload = (
         return;
       }
 
-      const payloadValue = buildPayload(template[key], recordValue[key], key, options);
+      const normalizedKey = normalizeFieldKey(key);
+      const payloadValue =
+        normalizeFieldKey(options.parentListKey ?? "") === "telefones" &&
+        normalizedKey === "numero"
+          ? onlyDigits(getRecordValue(recordValue, key))
+          : buildPayload(template[key], recordValue[key], key, options);
       if (payloadValue !== undefined) result[key] = payloadValue;
     });
 
@@ -278,6 +307,32 @@ const getItemId = (item: FormValue): number | null => {
     getRecordValue(item, "id");
   const id = Number(raw);
   return Number.isFinite(id) && id > 0 ? id : null;
+};
+
+const getImageList = (entityKey: string, record: FormValue): FormValue[] => {
+  const field = imageListFieldByEntity[entityKey];
+  if (!field) return [];
+  const value = getRecordValue(record, field);
+  return Array.isArray(value) ? (value.filter(isPlainObject) as FormValue[]) : [];
+};
+
+const getImageUrlPath = (image: FormValue): string => {
+  const rawUrl =
+    getRecordValue(image, "Url") ??
+    getRecordValue(image, "url") ??
+    getRecordValue(image, "Caminho") ??
+    getRecordValue(image, "caminho");
+  return String(rawUrl ?? "");
+};
+
+const getImageLabel = (image: FormValue, index: number): string => {
+  const rawLabel =
+    getRecordValue(image, "NomeOriginal") ??
+    getRecordValue(image, "nomeOriginal") ??
+    getRecordValue(image, "NomeArquivo") ??
+    getRecordValue(image, "nomeArquivo");
+  const label = String(rawLabel ?? "").trim();
+  return label || `Imagem ${index + 1}`;
 };
 
 const officeFieldKeys = [
@@ -346,6 +401,40 @@ const getAutoParentField = (path: Array<string | number>): string | null => {
     ? parentIdFieldByList[normalizeFieldKey(listKey)]
     : null;
 };
+
+const getParentListKey = (path: Array<string | number>): string | null => {
+  const listKey = [...path]
+    .reverse()
+    .find(
+      (part) =>
+        typeof part === "string" &&
+        (parentIdFieldByList[normalizeFieldKey(part)] ||
+          hiddenFieldByList[normalizeFieldKey(part)])
+    );
+
+  return typeof listKey === "string" ? listKey : null;
+};
+
+const isPhonePath = (path: Array<string | number>): boolean =>
+  path.some(
+    (part) =>
+      typeof part === "string" && normalizeFieldKey(part) === "telefones"
+  );
+
+const isPhoneNumberField = (
+  key: string,
+  path: Array<string | number>
+): boolean =>
+  isPhonePath(path) && normalizeFieldKey(key) === "numero";
+
+const getAtPath = (source: unknown, path: Array<string | number>): unknown =>
+  path.reduce<unknown>((current, part) => {
+    if (Array.isArray(current)) {
+      return current[typeof part === "number" ? part : Number(part)];
+    }
+    if (isPlainObject(current)) return current[part as string];
+    return undefined;
+  }, source);
 
 const formatValue = (
   key: string,
@@ -578,6 +667,11 @@ export default function GerenciaPage() {
   const selectedCapability = selectedConfig
     ? getEntityCapability(userRole, selectedConfig.key)
     : null;
+  const canCreateSelected = selectedConfig
+    ? selectedConfig.key === "clientes" && normalizeRole(userRole) === "cliente"
+      ? true
+      : Boolean(selectedCapability?.canCreate)
+    : false;
   const [items, setItems] = useState<FormValue[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -587,6 +681,9 @@ export default function GerenciaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [lastCepLookup, setLastCepLookup] = useState("");
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [savedImages, setSavedImages] = useState<FormValue[]>([]);
+  const [savedImagePreviews, setSavedImagePreviews] = useState<SavedImagePreview[]>([]);
   const [formData, setFormData] = useState<FormValue>(() =>
     cloneTemplate(entityConfigs[0].template)
   );
@@ -598,6 +695,58 @@ export default function GerenciaPage() {
     () => (token ? { Authorization: `Bearer ${token}` } : undefined),
     [token]
   );
+
+  useEffect(() => {
+    if (selectedConfig?.key !== "veiculos" || savedImages.length === 0) {
+      setSavedImagePreviews([]);
+      return;
+    }
+
+    let isMounted = true;
+    const objectUrls: string[] = [];
+
+    const loadImages = async () => {
+      const cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+      const previews = await Promise.all(
+        savedImages.map(async (image, index) => {
+          const path = getImageUrlPath(image);
+          if (!path) return null;
+          const separator = path.startsWith("/") ? "" : "/";
+          const url = path.startsWith("http")
+            ? path
+            : `${cleanBaseUrl}${separator}${path}`;
+
+          try {
+            const response = await fetch(url, { headers: authHeaders });
+            if (!response.ok) return null;
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            objectUrls.push(objectUrl);
+            return {
+              id: String(getRecordValue(image, "Id") ?? getRecordValue(image, "id") ?? index),
+              label: getImageLabel(image, index),
+              url: objectUrl,
+            } satisfies SavedImagePreview;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      if (isMounted) {
+        setSavedImagePreviews(previews.filter(Boolean) as SavedImagePreview[]);
+      } else {
+        objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      }
+    };
+
+    loadImages();
+
+    return () => {
+      isMounted = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [authHeaders, baseUrl, savedImages, selectedConfig?.key]);
 
   useEffect(() => {
     if (!entities.length) return;
@@ -707,6 +856,8 @@ export default function GerenciaPage() {
     setFormMode("create");
     setEditingId(null);
     setFormData(applyLoggedOficina(cloneTemplate(selectedConfig.template)));
+    setImageFiles([]);
+    setSavedImages([]);
     setShowForm(false);
     setSearchTerm("");
     setCurrentPage(1);
@@ -723,10 +874,12 @@ export default function GerenciaPage() {
   }, [baseUrl, token, userRole, oficinaId]);
 
   const openCreateForm = () => {
-    if (!selectedConfig || !selectedCapability?.canCreate) return;
+    if (!selectedConfig || !canCreateSelected) return;
     setFormMode("create");
     setEditingId(null);
     setFormData(applyLoggedOficina(cloneTemplate(selectedConfig.template)));
+    setImageFiles([]);
+    setSavedImages([]);
     setShowForm(true);
   };
 
@@ -763,14 +916,46 @@ export default function GerenciaPage() {
 
     setFormMode(nextMode);
     setEditingId(id);
+    setImageFiles([]);
+    setSavedImages(getImageList(selectedConfig.key, itemToEdit));
     setFormData(
       applyLoggedOficina(mergeWithTemplate(selectedConfig.template, itemToEdit) as FormValue)
     );
     setShowForm(true);
   };
 
+  const uploadImagesForEntity = async (
+    entityKey: string,
+    recordId: number
+  ): Promise<boolean> => {
+    const buildUploadPath = imageUploadPathByEntity[entityKey];
+    if (!buildUploadPath || imageFiles.length === 0) return true;
+
+    const body = new FormData();
+    imageFiles.forEach((file) => body.append("imagens", file));
+
+    const result = await fetchJson(baseUrl, buildUploadPath(recordId), {
+      method: "POST",
+      headers: authHeaders,
+      body,
+    });
+
+    if (!result.ok) {
+      const message =
+        isPlainObject(result.data) && typeof result.data.Message === "string"
+          ? result.data.Message
+          : "Registro salvo, mas falha ao enviar imagem";
+      setError(message);
+      setIsLoading(false);
+      return false;
+    }
+
+    setImageFiles([]);
+    return true;
+  };
+
   const handleCreate = async () => {
-    if (!selectedConfig || !selectedCapability?.canCreate) return;
+    if (!selectedConfig || !canCreateSelected) return;
     setIsLoading(true);
     setError(null);
     const result = await fetchJson(baseUrl, selectedConfig.createPath, {
@@ -793,11 +978,13 @@ export default function GerenciaPage() {
       return;
     }
 
+    let createdId = getNestedRecordId(result.data);
+
     if (
       selectedConfig.updatePath &&
       hasArrayItems(selectedConfig.template, formData)
     ) {
-      const createdId = await resolveCreatedId(result.data);
+      createdId = createdId ?? (await resolveCreatedId(result.data));
       if (createdId) {
         const childResult = await fetchJson(
           baseUrl,
@@ -825,6 +1012,18 @@ export default function GerenciaPage() {
           return;
         }
       }
+    }
+
+    if (imageFiles.length > 0) {
+      const imageTargetId = createdId ?? (await resolveCreatedId(result.data));
+      if (!imageTargetId) {
+        setError("Registro criado, mas nao foi possivel identificar o ID para enviar imagem.");
+        setIsLoading(false);
+        return;
+      }
+
+      const uploaded = await uploadImagesForEntity(selectedConfig.key, imageTargetId);
+      if (!uploaded) return;
     }
 
     setShowForm(false);
@@ -866,13 +1065,17 @@ export default function GerenciaPage() {
       return;
     }
 
+    const uploaded = await uploadImagesForEntity(selectedConfig.key, editingId);
+    if (!uploaded) return;
+
     setShowForm(false);
     await loadList(selectedConfig);
   };
 
   const handleDelete = async (id: number) => {
     if (!selectedConfig?.deletePath || !selectedCapability?.canDelete) return;
-    if (!window.confirm("Deseja realmente excluir este registro?")) return;
+    const actionLabel = getDeleteActionLabel(selectedConfig.key).toLowerCase();
+    if (!window.confirm(`Deseja realmente ${actionLabel} este registro?`)) return;
 
     setIsLoading(true);
     setError(null);
@@ -889,13 +1092,50 @@ export default function GerenciaPage() {
       const message =
         isPlainObject(result.data) && typeof result.data.Message === "string"
           ? result.data.Message
-          : "Falha ao excluir registro";
+          : `Falha ao ${actionLabel} registro`;
       setError(message);
       setIsLoading(false);
       return;
     }
 
     await loadList(selectedConfig);
+  };
+
+  const handleRemoveListItem = async (
+    listKey: string,
+    fieldPath: Array<string | number>,
+    items: unknown[],
+    item: unknown,
+    index: number
+  ) => {
+    const normalizedListKey = normalizeFieldKey(listKey);
+    const itemId = isPlainObject(item) ? getItemId(item) : null;
+
+    if (normalizedListKey === "telefones" && itemId) {
+      setIsLoading(true);
+      setError(null);
+      const result = await fetchJson(baseUrl, `/api/v1/telefones/${itemId}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      });
+
+      if (!result.ok) {
+        const message =
+          isPlainObject(result.data) && typeof result.data.Message === "string"
+            ? result.data.Message
+            : result.status === 403
+              ? "A API recusou excluir este telefone para o usuario atual."
+              : "Falha ao remover telefone.";
+        setError(message);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(false);
+    }
+
+    const nextItems = items.filter((_, idx) => idx !== index);
+    setFormData((prev) => setAtPath(prev, fieldPath, nextItems) as FormValue);
   };
 
   const handleFieldChange = (
@@ -906,6 +1146,19 @@ export default function GerenciaPage() {
     let nextValue: unknown = value;
     const key = String(path[path.length - 1] ?? "");
     const normalized = normalizeFieldKey(key);
+
+    if (isPhoneNumberField(key, path)) {
+      const digits = onlyDigits(value).slice(0, 11);
+      const parentPath = path.slice(0, -1);
+      const ddd = digits.slice(0, 2);
+      const number = digits.slice(2);
+      setFormData((prev) => {
+        let next = setAtPath(prev, path, number);
+        next = setAtPath(next, [...parentPath, "DDD"], ddd);
+        return next as FormValue;
+      });
+      return;
+    }
 
     if (
       normalized === "cep" ||
@@ -951,6 +1204,62 @@ export default function GerenciaPage() {
     }
   };
 
+  const renderImageField = () => {
+    if (!selectedConfig || !imageUploadPathByEntity[selectedConfig.key]) return null;
+
+    return (
+      <div className="mt-4 rounded-lg border border-[var(--sigo-border)] bg-white p-4">
+        <div className="mb-4 border-b border-[var(--sigo-border)] pb-4">
+          <p className="text-sm font-black text-[var(--sigo-text)]">Imagens</p>
+        </div>
+
+        {savedImagePreviews.length > 0 ? (
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {savedImagePreviews.map((image) => (
+              <figure
+                key={image.id}
+                className="overflow-hidden rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)]"
+              >
+                <img
+                  src={image.url}
+                  alt={image.label}
+                  className="aspect-video w-full object-cover"
+                />
+                <figcaption className="truncate px-3 py-2 text-xs font-semibold text-[var(--sigo-muted)]">
+                  {image.label}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        ) : formMode !== "create" ? (
+          <p className="mb-4 rounded-lg border border-dashed border-[var(--sigo-border-strong)] bg-[var(--sigo-surface-soft)] px-4 py-3 text-sm font-semibold text-[var(--sigo-muted)]">
+            Nenhuma imagem salva.
+          </p>
+        ) : null}
+
+        {formMode !== "view" ? (
+          <label className="sigo-label">
+            <span>Adicionar imagem</span>
+            <input
+              className="sigo-input"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) =>
+                setImageFiles(Array.from(event.target.files ?? []))
+              }
+            />
+            {imageFiles.length > 0 ? (
+              <span className="text-xs font-semibold text-[var(--sigo-muted)]">
+                {imageFiles.length} arquivo(s) selecionado(s).
+              </span>
+            ) : null}
+          </label>
+        ) : null}
+      </div>
+    );
+  };
+
   const renderFields = (
     template: Record<string, unknown>,
     value: Record<string, unknown>,
@@ -961,12 +1270,17 @@ export default function GerenciaPage() {
       const currentValue = value[key];
       const fieldPath = [...path, key];
       const autoParentField = getAutoParentField(path);
+      const parentListKey = getParentListKey(path);
+      const hiddenFields = parentListKey
+        ? hiddenFieldByList[normalizeFieldKey(parentListKey)] ?? []
+        : [];
 
       if (
         isOwnIdField(key, path) ||
         (path.length === 0 &&
           formMode !== "create" &&
           shouldHideFieldForEntity(selectedConfig.key, key)) ||
+        hiddenFields.some((field) => normalizeFieldKey(field) === normalizeFieldKey(key)) ||
         (autoParentField &&
           normalizeFieldKey(key) === normalizeFieldKey(autoParentField))
       ) {
@@ -1025,12 +1339,9 @@ export default function GerenciaPage() {
                       <button
                         type="button"
                         className="text-xs font-bold text-[var(--sigo-danger)]"
-                        onClick={() => {
-                          const nextItems = items.filter((_, idx) => idx !== index);
-                          setFormData((prev) =>
-                            setAtPath(prev, fieldPath, nextItems) as FormValue
-                          );
-                        }}
+                        onClick={() =>
+                          handleRemoveListItem(key, fieldPath, items, item, index)
+                        }
                       >
                         Remover
                       </button>
@@ -1068,7 +1379,18 @@ export default function GerenciaPage() {
           ? templateValue ?? ""
           : currentValue;
       const displayValue =
-        normalizeFieldKey(key) === "cep" ||
+        isPhoneNumberField(key, fieldPath)
+          ? formatPhone(
+              `${onlyDigits(
+                isPlainObject(getAtPath(formData, fieldPath.slice(0, -1)))
+                  ? getRecordValue(
+                      getAtPath(formData, fieldPath.slice(0, -1)) as FormValue,
+                      "DDD"
+                    )
+                  : ""
+              )}${onlyDigits(normalizedValue)}`
+            )
+          : normalizeFieldKey(key) === "cep" ||
         normalizeFieldKey(key).includes("cpf") ||
         normalizeFieldKey(key).includes("cnpj")
           ? maskFieldValue(key, normalizedValue)
@@ -1243,7 +1565,7 @@ export default function GerenciaPage() {
                   {filteredItems.length} de {items.length} registro(s).
                 </h2>
               </div>
-              {selectedCapability?.canCreate ? (
+              {canCreateSelected ? (
                 <button
                   type="button"
                   className="sigo-button sigo-button-primary"
@@ -1295,13 +1617,15 @@ export default function GerenciaPage() {
                 </div>
               ) : (
                 <div className="sigo-scrollbar overflow-auto rounded-lg border border-[var(--sigo-border)]">
-                  <table className="sigo-table">
+                  <table className="sigo-table min-w-[980px] table-auto">
                     <thead>
                       <tr>
                         {displayKeys.map((key) => (
-                          <th key={key}>{formatFieldLabel(key)}</th>
+                          <th key={key} className="whitespace-nowrap">
+                            {formatFieldLabel(key)}
+                          </th>
                         ))}
-                        <th>Ações</th>
+                        <th className="w-20 whitespace-nowrap text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1311,7 +1635,7 @@ export default function GerenciaPage() {
                         return (
                           <tr key={`${selectedConfig.key}-${id ?? rowIndex}`}>
                             {displayKeys.map((key) => (
-                              <td key={`${key}-${rowIndex}`}>
+                              <td key={`${key}-${rowIndex}`} className="whitespace-nowrap">
                                 {formatValue(
                                   key,
                                   getRecordValue(item, key) ?? item[key],
@@ -1319,12 +1643,14 @@ export default function GerenciaPage() {
                                 )}
                               </td>
                             ))}
-                            <td>
-                              <div className="flex flex-wrap gap-2">
+                            <td className="w-20 whitespace-nowrap">
+                              <div className="flex w-16 flex-nowrap items-center justify-center gap-2">
                                 <button
                                   type="button"
-                                  className="sigo-button min-h-9 px-3 text-xs"
+                                  className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent p-0.5 hover:bg-[var(--sigo-surface-soft)] disabled:opacity-50"
                                   disabled={!id}
+                                  title={selectedCapability?.canUpdate ? "Editar" : "Ver"}
+                                  aria-label={selectedCapability?.canUpdate ? "Editar" : "Ver"}
                                   onClick={() =>
                                     handleEdit(
                                       item,
@@ -1334,18 +1660,30 @@ export default function GerenciaPage() {
                                     )
                                   }
                                 >
-                                  {selectedCapability?.canUpdate ? "Editar" : "Ver"}
+                                  <img
+                                    src="/pencil.png"
+                                    alt=""
+                                    className="h-5 w-5 object-contain"
+                                  />
                                 </button>
                                 {selectedCapability?.canDelete ? (
                                   <button
-                                    type="button"
-                                    className="sigo-button sigo-button-danger min-h-9 px-3 text-xs"
+                                      type="button"
+                                      className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent p-0.5 hover:bg-red-50 disabled:opacity-50"
                                     disabled={!selectedConfig.deletePath || !id}
+                                    title={getDeleteActionLabel(selectedConfig.key)}
+                                    aria-label={getDeleteActionLabel(selectedConfig.key)}
                                     onClick={() => id && handleDelete(id)}
                                   >
-                                    Excluir
+                                    <img
+                                      src="/delete.png"
+                                      alt=""
+                                      className="h-5 w-5 object-contain"
+                                    />
                                   </button>
-                                ) : null}
+                                ) : (
+                                  <span className="h-7 w-7" aria-hidden="true" />
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1426,6 +1764,7 @@ export default function GerenciaPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                 {renderFields(selectedConfig.template, formData)}
                 </div>
+                {renderImageField()}
               </div>
 
               {error ? (

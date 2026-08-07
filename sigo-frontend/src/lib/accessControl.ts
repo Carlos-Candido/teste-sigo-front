@@ -42,12 +42,24 @@ const readOnlyScoped: EntityCapability = {
   scopeToOwnOffice: true,
 };
 
+const clientProfileCapability: EntityCapability = {
+  canList: true,
+  canCreate: true,
+  canUpdate: true,
+  canDelete: false,
+};
+
 const roleCapabilities: Record<
   Exclude<RoleKey, "unknown">,
   Record<string, EntityCapability>
 > = {
   oficina: {
-    clientes: readOnlyScoped,
+    clientes: {
+      ...readOnlyScoped,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: true,
+    },
     funcionarios: fullCapability,
     veiculos: fullCapability,
     pecas: fullCapability,
@@ -59,6 +71,8 @@ const roleCapabilities: Record<
     clientes: {
       ...readOnlyScoped,
       canCreate: true,
+      canUpdate: true,
+      canDelete: true,
     },
     funcionarios: readOnlyScoped,
     veiculos: editableNoDelete,
@@ -67,7 +81,9 @@ const roleCapabilities: Record<
     pedidos: editableNoDelete,
     marcas: editableNoDelete,
   },
-  cliente: {},
+  cliente: {
+    clientes: clientProfileCapability,
+  },
 };
 
 const profileEntityByRole: Record<Exclude<RoleKey, "unknown">, string | null> = {
@@ -88,7 +104,7 @@ const profileEditableFieldsByRole: Record<Exclude<RoleKey, "unknown">, string[]>
     "Pais",
     "Complemento",
   ],
-  funcionario: ["Nome", "Cargo", "Email", "Senha"],
+  funcionario: ["Nome", "Cargo", "Email"],
   cliente: [
     "Nome",
     "Obs",
@@ -103,7 +119,6 @@ const profileEditableFieldsByRole: Record<Exclude<RoleKey, "unknown">, string[]>
     "Pais",
     "Complemento",
     "Sexo",
-    "TipoCliente",
     "Telefones",
   ],
 };
@@ -170,7 +185,7 @@ export const getScopedListPath = (
   oficinaId: number | null
 ): string | undefined => {
   if (entityKey === "clientes" && oficinaId) {
-    return `/api/clientes/oficinas/${oficinaId}`;
+    return `/api/v1/clientes/oficinas/${oficinaId}`;
   }
 
   return listPath;
@@ -179,11 +194,14 @@ export const getScopedListPath = (
 export const applyCapabilityToConfig = (
   config: CrudConfig,
   capability: EntityCapability,
-  oficinaId: number | null
+  oficinaId: number | null,
+  role: string | null | undefined
 ): CrudConfig => ({
   ...config,
   listPath: capability.canList
-    ? getScopedListPath(config.key, config.listPath, oficinaId)
+    ? role && normalizeRole(role) === "cliente" && config.key === "clientes"
+      ? undefined
+      : getScopedListPath(config.key, config.listPath, oficinaId)
     : undefined,
   updatePath: capability.canUpdate ? config.updatePath : undefined,
   deletePath: capability.canDelete ? config.deletePath : undefined,
@@ -201,5 +219,5 @@ export const getAllowedManagementConfigs = (
     }))
     .filter(({ capability }) => capability.canList)
     .map(({ config, capability }) =>
-      applyCapabilityToConfig(config, capability, oficinaId)
+      applyCapabilityToConfig(config, capability, oficinaId, role)
     );
