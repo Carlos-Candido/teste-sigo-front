@@ -33,6 +33,83 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --text-xs: 0.6875rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+  --text-2xl: 1.3125rem;
+  --text-3xl: 1.625rem;
+  --text-4xl: 2rem;
+}
+
+/* Escala tipográfica própria da área do cliente, sem alterar a navbar. */
+.sigo-client-area main .text-xs,
+.sigo-client-area > .fixed .text-xs {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.sigo-client-area main .text-sm,
+.sigo-client-area > .fixed .text-sm {
+  font-size: 1rem !important;
+  line-height: 1.5rem;
+}
+
+.sigo-client-area main .text-base,
+.sigo-client-area main .\!text-base,
+.sigo-client-area > .fixed .text-base {
+  font-size: 1.125rem !important;
+  line-height: 1.75rem;
+}
+
+.sigo-client-area main .text-lg,
+.sigo-client-area > .fixed .text-lg {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+.sigo-client-area main .text-xl,
+.sigo-client-area > .fixed .text-xl {
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+
+@keyframes sigo-client-slide-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sigo-client-slide-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.sigo-client-tab-from-left {
+  animation: sigo-client-slide-from-left 280ms ease-out both;
+}
+
+.sigo-client-tab-from-right {
+  animation: sigo-client-slide-from-right 280ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sigo-client-tab-from-left,
+  .sigo-client-tab-from-right {
+    animation: none;
+  }
 }
 
 * {
@@ -43,6 +120,21 @@ html {
   min-height: 100%;
   background: #ffffff;
   color-scheme: light;
+  scrollbar-color: #94a3b8 #ffffff;
+}
+
+html::-webkit-scrollbar {
+  width: 12px;
+}
+
+html::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+html::-webkit-scrollbar-thumb {
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: #94a3b8;
 }
 
 body {
@@ -51,6 +143,22 @@ body {
   background: transparent;
   color: var(--sigo-text);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  scrollbar-color: #94a3b8 #ffffff;
+}
+
+body::-webkit-scrollbar {
+  width: 12px;
+  background: #ffffff;
+}
+
+body::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+body::-webkit-scrollbar-thumb {
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: #94a3b8;
 }
 
 body::before {
@@ -65,6 +173,10 @@ body::before {
 body > * {
   position: relative;
   z-index: 1;
+}
+
+body > footer {
+  z-index: 0;
 }
 
 body > .min-h-screen.bg-slate-50,
@@ -111,14 +223,244 @@ textarea:disabled {
 }
 
 .sigo-page {
-  min-height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
   background: transparent;
   color: var(--sigo-text);
+}
+
+@media (min-width: 640px) {
+  .sigo-registration-card {
+    height: 46rem;
+    min-height: 46rem;
+    max-height: 46rem;
+  }
 }
 
 .sigo-shell {
   width: min(1180px, calc(100% - 2rem));
   margin-inline: auto;
+}
+
+.sigo-dashboard-shell {
+  width: calc(100% - 2rem);
+  max-width: 1740px;
+  flex: 1 0 auto;
+  margin-left: 1rem;
+  margin-right: auto;
+}
+
+.sigo-dashboard-sidebar {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  align-self: stretch;
+  background-color: #031b3c;
+  box-shadow: var(--sigo-shadow-md);
+}
+
+.sigo-dashboard-sidebar::before,
+.sigo-dashboard-sidebar::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.sigo-dashboard-sidebar::before {
+  z-index: 0;
+  background-image: url("/istockphoto.jpg");
+  background-position: top center;
+  background-size: 100% auto;
+  background-repeat: repeat-y;
+}
+
+.sigo-dashboard-sidebar::after {
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(1, 15, 36, 0.88), rgba(3, 31, 68, 0.86));
+}
+
+.sigo-dashboard-sidebar-nav {
+  position: relative;
+  z-index: 2;
+}
+
+@media (min-width: 1024px) {
+  .sigo-dashboard-sidebar::before {
+    background-position: top center;
+    background-size: auto 1200px;
+    -webkit-mask-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 200px,
+      #000 1000px,
+      transparent 1200px
+    );
+    mask-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 200px,
+      #000 1000px,
+      transparent 1200px
+    );
+  }
+
+  .sigo-dashboard-sidebar-nav {
+    position: sticky;
+    top: 0.75rem;
+  }
+
+  .sigo-dashboard-shell {
+    width: calc(100% - 1rem);
+    max-width: none;
+    margin-left: 0;
+    margin-right: 1rem;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .sigo-dashboard-shell > :not(.sigo-dashboard-sidebar) {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .sigo-management-shell > :not(.sigo-dashboard-sidebar) {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .sigo-dashboard-home-shell > :not(.sigo-dashboard-sidebar) {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+}
+
+.sigo-navbar-shell {
+  width: calc(100% - 2rem);
+  max-width: none;
+}
+
+.sigo-dashboard-panel {
+  padding: 1.25rem;
+  padding-bottom: 0;
+}
+
+.sigo-dashboard-panel.sigo-analysis-panel {
+  padding-bottom: 1.5rem;
+  scroll-padding-bottom: 1.5rem;
+}
+
+.sigo-dashboard-panel.sigo-analysis-panel > * + * {
+  margin-top: 0;
+  border-top: 0;
+}
+
+.sigo-dashboard-panel.sigo-analysis-panel > .sigo-analysis-tabs {
+  padding-top: 2rem;
+}
+
+.sigo-dashboard-panel.sigo-analysis-panel > .sigo-analysis-content {
+  margin-right: -1.25rem;
+  margin-left: -1.25rem;
+  border-top: 1px solid var(--sigo-border);
+  padding: 1.25rem;
+}
+
+.sigo-analysis-content > * + * {
+  margin-top: 1.25rem;
+}
+
+.sigo-dashboard-panel > * + * {
+  margin-top: 1.25rem;
+  margin-right: -1.25rem;
+  margin-left: -1.25rem;
+  border-top: 1px solid var(--sigo-border);
+  padding-top: 1.25rem;
+  padding-right: 1.25rem;
+  padding-left: 1.25rem;
+}
+
+.sigo-dashboard-panel > .sigo-dashboard-orders {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.sigo-loader {
+  display: flex;
+  min-height: 9rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  animation: sigo-loader-fade-out 0.5s ease-in-out forwards;
+}
+
+.sigo-loader-compact {
+  min-height: 7rem;
+}
+
+.sigo-loader-mark {
+  position: relative;
+  display: grid;
+  width: 6rem;
+  height: 6rem;
+  place-items: center;
+}
+
+.sigo-loader-compact .sigo-loader-mark {
+  width: 5rem;
+  height: 5rem;
+}
+
+.sigo-loader-gear,
+.sigo-loader-text {
+  position: absolute;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(20%) sepia(75%) saturate(1800%) hue-rotate(192deg) brightness(88%) contrast(102%);
+}
+
+.sigo-loader-gear {
+  width: 100%;
+  height: 100%;
+  animation: sigo-loader-spin 0.5s ease-in-out forwards;
+}
+
+.sigo-loader-text {
+  width: 62%;
+  height: 62%;
+}
+
+.sigo-loader-dark .sigo-loader-gear,
+.sigo-loader-dark .sigo-loader-text {
+  filter: none;
+}
+
+.sigo-loader-label {
+  color: var(--sigo-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.sigo-loader-dark .sigo-loader-label {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+@keyframes sigo-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sigo-loader-fade-out {
+  0%,
+  84% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .sigo-card {
@@ -145,7 +487,7 @@ textarea:disabled {
   background: var(--sigo-surface);
   padding: 0 1rem;
   color: var(--sigo-blue-deep);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
 }
@@ -186,7 +528,7 @@ textarea:disabled {
   background: #ffffff;
   padding: 0 0.875rem;
   color: var(--sigo-text);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   box-shadow: 0 1px 0 rgba(8, 47, 99, 0.03);
 }
 
@@ -204,7 +546,7 @@ textarea:disabled {
   display: grid;
   gap: 0.45rem;
   color: var(--sigo-muted);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -219,7 +561,7 @@ textarea:disabled {
   background: var(--sigo-surface-soft);
   padding: 0 0.75rem;
   color: var(--sigo-blue-deep);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1;
 }
@@ -242,7 +584,7 @@ textarea:disabled {
   min-width: 760px;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
 }
 
 .sigo-table th {
@@ -250,7 +592,7 @@ textarea:disabled {
   background: var(--sigo-surface-soft);
   padding: 0.85rem 0.9rem;
   color: var(--sigo-muted);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 800;
   text-align: left;
 }
@@ -265,6 +607,25 @@ textarea:disabled {
 
 .sigo-table tbody tr:hover td {
   background: #f9fbff;
+}
+
+.sigo-observation-input {
+  display: block;
+  min-height: 10rem;
+  padding: 1rem;
+  line-height: 1.5;
+}
+
+.sigo-management-table th {
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+}
+
+.sigo-management-table td {
+  height: 2.5rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  vertical-align: middle;
 }
 
 .sigo-scrollbar {

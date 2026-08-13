@@ -5,6 +5,7 @@ export default interface Peca {
   Descricao: string;
   Valor: number;
   Quantidade: number;
+  quantidadeEstoque: number;
   Garantia: string;
   Unidade: number;
   IdMarca: number;

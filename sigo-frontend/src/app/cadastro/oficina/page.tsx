@@ -39,7 +39,7 @@ const buildDefaultForm = (): OficinaForm => ({
   Cep: "",
   Bairro: "",
   Estado: "",
-  Pais: "",
+  Pais: "Brasil",
   Complemento: "",
   Senha: "",
 });
@@ -69,6 +69,18 @@ const extractErrorMessage = (data: unknown): string | null => {
   }
 
   return null;
+};
+
+const extractToken = (data: unknown): string => {
+  if (typeof data === "string") return data;
+  if (!data || typeof data !== "object") return "";
+
+  const record = data as Record<string, unknown>;
+  const token =
+    record.accessToken ?? record.AccessToken ?? record.token ?? record.Token;
+  if (typeof token === "string") return token;
+
+  return extractToken(record.data) || extractToken(record.Data);
 };
 
 type NumberFieldProps = {
@@ -120,7 +132,7 @@ function SelectField({ label, value, options, onChange }: SelectFieldProps) {
 
 export default function CadastroOficinaPage() {
   const router = useRouter();
-  const { baseUrl, setBaseUrl } = useAuth();
+  const { baseUrl, setBaseUrl, setToken } = useAuth();
   const [formData, setFormData] = useState<OficinaForm>(buildDefaultForm);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +194,7 @@ export default function CadastroOficinaPage() {
       CNPJ: onlyDigits(formData.CNPJ),
       Cep: Number(onlyDigits(formData.Cep) || 0),
       Senha: senha,
+      Situacao: 1,
     };
 
     const result = await fetchJson(baseUrl, "/api/v1/oficinas", {
@@ -190,7 +203,27 @@ export default function CadastroOficinaPage() {
     });
 
     if (result.ok) {
-      router.replace(routes.login);
+      const loginResult = await fetchJson(baseUrl, "/api/v1/oficinas/login", {
+        method: "POST",
+        body: {
+          Email: formData.Email.trim().toLowerCase(),
+          Password: senha,
+        },
+      });
+      const token = extractToken(loginResult.data)
+        .trim()
+        .replace(/^Bearer\s+/i, "");
+
+      if (!loginResult.ok || !token) {
+        setError(
+          "Oficina criada, mas não foi possível entrar automaticamente. Tente entrar pela tela de login."
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      setToken(token);
+      router.replace(routes.dashboard);
       return;
     }
 
@@ -295,8 +328,9 @@ export default function CadastroOficinaPage() {
                 />
                 <TextInput
                   label="Pais"
-                  value={formData.Pais}
-                  onChange={(value) => updateField("Pais", value)}
+                  value="Brasil"
+                  onChange={() => undefined}
+                  disabled
                 />
                 <TextInput
                   label="Complemento"

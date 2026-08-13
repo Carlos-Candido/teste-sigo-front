@@ -30,6 +30,7 @@ export default interface Pedido {
   Observacao: string;
   DataInicio: string;
   DataFim: string;
+  Status: number;
   Pedido_Pecas: PedidoPeca[];
   Pedido_Servicos: PedidoServico[];
 }

@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { DashboardTabs } from "@/components/Dashboard/DashboardTabs";
+import { DashboardSidebar } from "@/components/Dashboard/DashboardSidebar";
+import { SigoLoader } from "@/components/Loading/SigoLoader";
 import { NavBar } from "@/components/Sidebar/NavBar";
 import { ProtectedRoute } from "@/components/Auth/RouteGuards";
 import { useAuth } from "@/hooks/useAuth";
+import { useMinimumLoading } from "@/hooks/useMinimumLoading";
 import { fetchJson } from "@/lib/api";
 import { fetchCepAddress } from "@/lib/cep";
 import {
@@ -43,13 +45,13 @@ const fieldLabels: Record<string, string> = {
   obs: "Observacao",
   razao: "Razao social",
   datanasc: "Data de nascimento",
-  numero: "Numero",
+  numero: "Número",
   rua: "Rua",
   cidade: "Cidade",
   cep: "CEP",
   bairro: "Bairro",
   estado: "Estado",
-  pais: "Pais",
+  pais: "País",
   complemento: "Complemento",
   sexo: "Sexo",
   tipocliente: "Tipo de cliente",
@@ -270,6 +272,10 @@ export default function PerfilPage() {
   const [formData, setFormData] = useState<FormValue>({});
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { isVisible: showLoading, cycle: loadingCycle } = useMinimumLoading(
+    isLoading,
+    500
+  );
   const [error, setError] = useState<string | null>(null);
   const [lastCepLookup, setLastCepLookup] = useState("");
 
@@ -288,7 +294,7 @@ export default function PerfilPage() {
 
     const loadProfile = async () => {
       if (!config) {
-        setError("Perfil nao encontrado para este tipo de usuario.");
+        setError("Perfil não encontrado para este tipo de usuário.");
         setIsLoading(false);
         return;
       }
@@ -324,7 +330,7 @@ export default function PerfilPage() {
       if (!isMounted) return;
 
       if (!record) {
-        setError("Nao foi possivel carregar sua conta.");
+        setError("Não foi possível carregar sua conta.");
         setFormData(cloneTemplate(config.template));
         setIsLoading(false);
         return;
@@ -447,6 +453,11 @@ export default function PerfilPage() {
           return;
         }
 
+        if (normalized === "pais") {
+          result[key] = "Brasil";
+          return;
+        }
+
         const payloadValue = buildPayload(
           template[key],
           getRecordValue(recordValue, key),
@@ -533,8 +544,13 @@ export default function PerfilPage() {
   ) => {
     const options = getFieldOptions(key);
     const isPasswordField = normalizeFieldKey(key).includes("senha");
+    const isCountryField = normalizeFieldKey(key) === "pais";
     const normalizedValue =
-      value === undefined || value === null ? templateValue ?? "" : value;
+      isCountryField
+        ? "Brasil"
+        : value === undefined || value === null
+          ? templateValue ?? ""
+          : value;
     const parentValue = getAtPath(formData, path.slice(0, -1));
     const phoneDisplayValue = (() => {
       if (!isPhoneNumberField(key, path)) return null;
@@ -576,13 +592,14 @@ export default function PerfilPage() {
                   ? String(value ?? "")
                   : fieldDisplayValue
               }
+              disabled={isCountryField}
               onChange={(event) => updateField(path, templateValue, event.target.value)}
             />
           )
         ) : (
           <span className="min-h-11 rounded-lg border border-[var(--sigo-border)] bg-white px-3 py-3 text-sm font-bold text-[var(--sigo-text)]">
             {isPasswordField
-              ? "Nao alterada"
+              ? "Não alterada"
               : fieldDisplayValue || "-"}
           </span>
         )}
@@ -692,9 +709,9 @@ export default function PerfilPage() {
     <ProtectedRoute>
       <div className="sigo-page">
         <NavBar />
-        <main className="sigo-shell grid gap-6 py-8">
-          {normalizedRole !== "cliente" ? <DashboardTabs /> : null}
-
+        <main className={`sigo-shell grid gap-6 py-8 ${normalizedRole !== "cliente" ? "sigo-dashboard-shell lg:grid-cols-[310px_minmax(0,1fr)] lg:items-start" : ""}`}>
+          {normalizedRole !== "cliente" ? <DashboardSidebar /> : null}
+          <div className="grid min-w-0 gap-6">
           <section className="sigo-card overflow-hidden">
             <div className="flex flex-col gap-3 bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] p-6 text-white sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -733,10 +750,8 @@ export default function PerfilPage() {
           ) : null}
 
           <section className="sigo-card p-5">
-            {isLoading ? (
-              <p className="text-sm font-semibold text-[var(--sigo-muted)]">
-                Carregando...
-              </p>
+            {showLoading ? (
+              <SigoLoader key={loadingCycle} compact />
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-2">{renderFields()}</div>
@@ -746,7 +761,7 @@ export default function PerfilPage() {
                       className="text-sm font-bold text-[var(--sigo-muted)] hover:text-[var(--sigo-blue)]"
                       href={homeRoute}
                     >
-                      Voltar para pagina principal
+                      Voltar para página principal
                     </Link>
                     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
                       <button
@@ -762,7 +777,7 @@ export default function PerfilPage() {
                         onClick={handleUpdate}
                         disabled={isLoading || !profileId}
                       >
-                        Salvar alteracoes
+                        Salvar alterações
                       </button>
                     </div>
                   </div>
@@ -770,6 +785,7 @@ export default function PerfilPage() {
               </>
             )}
           </section>
+          </div>
         </main>
       </div>
     </ProtectedRoute>

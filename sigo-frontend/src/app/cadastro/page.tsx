@@ -14,7 +14,6 @@ import {
   formatCep,
   formatCnpj,
   formatCpf,
-  formatCpfCnpj,
   formatPhone,
   onlyDigits,
   stateOptions,
@@ -25,7 +24,6 @@ type CadastroForm = {
   Nome: string;
   Email: string;
   senha: string;
-  Senha: string;
   Documento: string;
   Telefone: string;
   Obs: string;
@@ -44,43 +42,84 @@ type CadastroForm = {
 
 type CadastroMode = "cliente" | "oficina";
 
+const getTodayIso = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const buildDefaultForm = (): CadastroForm => ({
   Nome: "",
   Email: "",
   senha: "",
-  Senha: "",
   Documento: "",
   Telefone: "",
   Obs: "",
   razao: "",
-  DataNasc: "",
+  DataNasc: getTodayIso(),
   Numero: 0,
   Rua: "",
   Cidade: "",
   Cep: "",
   Bairro: "",
   Estado: "",
-  Pais: "",
+  Pais: "Brasil",
   Complemento: "",
-  Sexo: 1,
+  Sexo: 3,
 });
 
-const normalizeDigits = (value: string) => value.replace(/\D/g, "");
+const getClienteValidationError = (form: CadastroForm): string | null => {
+  const name = form.Nome.trim();
+  const email = form.Email.trim();
+  const password = form.senha;
+  const cep = onlyDigits(form.Cep);
+  const phone = onlyDigits(form.Telefone);
+  const today = new Date();
+  const localToday = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
 
-const isCpfDocument = (value: string) => normalizeDigits(value).length <= 11;
+  if (onlyDigits(form.Documento).length !== 11) {
+    return "O CPF deve conter exatamente 11 dígitos.";
+  }
+  if (!name || name.length > 100) {
+    return "O nome é obrigatório e deve ter no máximo 100 caracteres.";
+  }
+  if (
+    !email ||
+    email.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+    return "Informe um e-mail válido com no máximo 254 caracteres.";
+  }
+  if (
+    password.length < 8 ||
+    password.length > 128 ||
+    !/[A-Za-z]/.test(password) ||
+    !/\d/.test(password)
+  ) {
+    return "A senha deve ter entre 8 e 128 caracteres, uma letra e um número.";
+  }
+  if (cep.length !== 8) return "O CEP deve conter 8 dígitos.";
+  if (phone && phone.length !== 10 && phone.length !== 11) {
+    return "O telefone deve conter DDD e 8 ou 9 dígitos.";
+  }
+  if (form.Numero < 0) return "O número do endereço não pode ser negativo.";
+  if (form.DataNasc && form.DataNasc > localToday) {
+    return "A data de nascimento não pode estar no futuro.";
+  }
+
+  return null;
+};
 
 const extractErrorMessage = (data: unknown): string | null => {
   if (!data || typeof data !== "object") return null;
   const record = data as Record<string, unknown>;
-  const message =
-    (record.Message as string | undefined) ||
-    (record.message as string | undefined) ||
-    (record.title as string | undefined) ||
-    (record.detail as string | undefined);
-
-  if (message && message.trim()) return message;
-
-  const errors = record.Errors ?? record.errors ?? record.data;
+  const errors = record.Errors ?? record.errors;
   if (errors && typeof errors === "object") {
     const values = Object.values(errors as Record<string, unknown>);
     const list = values.flatMap((value) => {
@@ -92,6 +131,19 @@ const extractErrorMessage = (data: unknown): string | null => {
     });
     if (list.length > 0) return list.join(" | ");
   }
+
+  if (record.data && typeof record.data === "object") {
+    const nestedMessage = extractErrorMessage(record.data);
+    if (nestedMessage) return nestedMessage;
+  }
+
+  const message =
+    (record.Message as string | undefined) ||
+    (record.message as string | undefined) ||
+    (record.detail as string | undefined) ||
+    (record.title as string | undefined);
+
+  if (message && message.trim()) return message;
 
   return null;
 };
@@ -145,40 +197,53 @@ function SelectField({ label, value, options, onChange }: SelectFieldProps) {
 
 export default function CadastroPage() {
   const router = useRouter();
-  const { baseUrl, setBaseUrl, setToken } = useAuth();
-  const [formData, setFormData] = useState<CadastroForm>(buildDefaultForm);
+  const { baseUrl, setToken } = useAuth();
   const [cadastroMode, setCadastroMode] = useState<CadastroMode>("cliente");
+  const [forms, setForms] = useState<Record<CadastroMode, CadastroForm>>(() => ({
+    cliente: buildDefaultForm(),
+    oficina: buildDefaultForm(),
+  }));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastCepLookup, setLastCepLookup] = useState("");
+  const [lastCepLookups, setLastCepLookups] = useState<
+    Record<CadastroMode, string>
+  >({ cliente: "", oficina: "" });
   const isSubmittingRef = useRef(false);
 
   const isOficinaMode = cadastroMode === "oficina";
-  const isClienteCpf = !isOficinaMode && isCpfDocument(formData.Documento);
-  const documentLabel = isOficinaMode ? "CNPJ" : isClienteCpf ? "CPF" : "CNPJ";
-  const documentPlaceholder = isClienteCpf
-    ? "000.000.000-00"
-    : "00.000.000/0000-00";
+  const formData = forms[cadastroMode];
+  const lastCepLookup = lastCepLookups[cadastroMode];
+  const documentLabel = isOficinaMode ? "CNPJ" : "CPF";
+  const documentPlaceholder = isOficinaMode
+    ? "00.000.000/0000-00"
+    : "000.000.000-00";
+
+  const setCurrentForm = (
+    updater: (previous: CadastroForm) => CadastroForm
+  ) => {
+    setForms((previous) => ({
+      ...previous,
+      [cadastroMode]: updater(previous[cadastroMode]),
+    }));
+  };
 
   const updateField = (key: keyof CadastroForm, value: string) => {
     const maskedValue =
       key === "Documento"
         ? isOficinaMode
           ? formatCnpj(value)
-          : isCpfDocument(value)
-          ? formatCpf(value)
-          : formatCpfCnpj(value)
+          : formatCpf(value)
         : key === "Telefone"
           ? formatPhone(value)
         : key === "Cep"
           ? formatCep(value)
           : value;
-    setFormData((prev) => ({ ...prev, [key]: maskedValue }));
+    setCurrentForm((prev) => ({ ...prev, [key]: maskedValue }));
   };
 
   const updateNumberField = (key: keyof CadastroForm, value: string) => {
     const parsed = Number(value);
-    setFormData((prev) => ({
+    setCurrentForm((prev) => ({
       ...prev,
       [key]: Number.isNaN(parsed) ? 0 : parsed,
     }));
@@ -189,11 +254,14 @@ export default function CadastroPage() {
     if (cepDigits.length !== 8 || cepDigits === lastCepLookup) return;
 
     let isMounted = true;
-    setLastCepLookup(cepDigits);
+    setLastCepLookups((previous) => ({
+      ...previous,
+      [cadastroMode]: cepDigits,
+    }));
 
     fetchCepAddress(baseUrl, cepDigits).then((address) => {
       if (!isMounted || !address) return;
-      setFormData((prev) => ({
+      setCurrentForm((prev) => ({
         ...prev,
         Rua: address.rua || prev.Rua,
         Bairro: address.bairro || prev.Bairro,
@@ -207,7 +275,7 @@ export default function CadastroPage() {
     return () => {
       isMounted = false;
     };
-  }, [baseUrl, formData.Cep, lastCepLookup]);
+  }, [baseUrl, cadastroMode, formData.Cep, lastCepLookup]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -224,14 +292,17 @@ export default function CadastroPage() {
       telefoneDigits.length >= 10
         ? [
             {
-              ddd: Number(telefoneDigits.slice(0, 2)),
-              numero: telefoneDigits.slice(2),
+              DDD: Number(telefoneDigits.slice(0, 2)),
+              Numero: telefoneDigits.slice(2),
             },
           ]
         : [];
-    const senha = (formData.Senha || formData.senha).trim();
-    if (isOficinaMode && !senha) {
-      setError("Informe a senha da oficina.");
+    const senha = formData.senha.trim();
+    const clienteValidationError = isOficinaMode
+      ? null
+      : getClienteValidationError(formData);
+    if (clienteValidationError || (isOficinaMode && !senha)) {
+      setError(clienteValidationError ?? "Informe a senha da oficina.");
       isSubmittingRef.current = false;
       setIsLoading(false);
       return;
@@ -274,26 +345,6 @@ export default function CadastroPage() {
       return extractClienteId(record.data) ?? extractClienteId(record.Data);
     };
 
-    const fullClientePayload = {
-      nome: formData.Nome,
-      email: formData.Email,
-      cpf_Cnpj: documentDigits,
-      obs: formData.Obs,
-      razao: formData.razao,
-      dataNasc: formData.DataNasc || "0001-01-01",
-      numero: formData.Numero,
-      rua: formData.Rua,
-      cidade: formData.Cidade,
-      cep: cepDigits,
-      bairro: formData.Bairro,
-      estado: formData.Estado,
-      pais: formData.Pais,
-      complemento: formData.Complemento,
-      sexo: formData.Sexo,
-      tipoCliente: isCpfDocument(formData.Documento) ? 1 : 2,
-      telefones: clienteTelefones,
-    };
-
     const result = isOficinaMode
       ? await fetchJson(baseUrl, "/api/v1/oficinas", {
           method: "POST",
@@ -310,27 +361,49 @@ export default function CadastroPage() {
           Pais: formData.Pais,
           Complemento: formData.Complemento,
           Senha: senha,
+          Situacao: 1,
           },
         })
       : await fetchJson(baseUrl, "/api/v1/clientes/cadastros", {
           method: "POST",
           body: {
-            Cpf: documentDigits,
-            Nome: formData.Nome,
-            Email: formData.Email,
-            Senha: senha,
+            cpf: documentDigits,
+            nome: formData.Nome.trim(),
+            email: formData.Email.trim().toLowerCase(),
+            senha,
           },
         });
 
     if (result.ok && isOficinaMode) {
-      router.replace(routes.login);
+      const loginResult = await fetchJson(baseUrl, "/api/v1/oficinas/login", {
+        method: "POST",
+        body: {
+          Email: formData.Email.trim().toLowerCase(),
+          Password: senha,
+        },
+      });
+      const token = extractToken(loginResult.data)
+        .trim()
+        .replace(/^Bearer\s+/i, "");
+
+      if (!loginResult.ok || !token) {
+        setError(
+          "Oficina criada, mas não foi possível entrar automaticamente. Tente entrar pela tela de login."
+        );
+        isSubmittingRef.current = false;
+        setIsLoading(false);
+        return;
+      }
+
+      setToken(token);
+      router.replace(routes.dashboard);
       return;
     }
 
     if (result.ok) {
       const clienteId = extractClienteId(result.data);
       if (!clienteId) {
-        setError("Cliente criado, mas nao foi possivel identificar o cadastro.");
+        setError("Cliente criado, mas não foi possível identificar o cadastro.");
         isSubmittingRef.current = false;
         setIsLoading(false);
         return;
@@ -339,18 +412,44 @@ export default function CadastroPage() {
       const loginResult = await fetchJson(baseUrl, "/api/v1/clientes/login", {
         method: "POST",
         body: {
-          Cpf: documentDigits,
-          Senha: senha,
+          cpf: documentDigits,
+          senha,
         },
       });
 
       const token = extractToken(loginResult.data).trim().replace(/^Bearer\s+/i, "");
       if (!loginResult.ok || !token) {
-        setError("Cliente criado, mas nao foi possivel entrar para completar o cadastro.");
+        setError("Cliente criado, mas não foi possível entrar para completar o cadastro.");
         isSubmittingRef.current = false;
         setIsLoading(false);
         return;
       }
+
+      const fullClientePayload = {
+        nome: formData.Nome.trim(),
+        email: formData.Email.trim().toLowerCase(),
+        cpf_Cnpj: documentDigits,
+        obs: formData.Obs,
+        razao: formData.razao,
+        dataNasc: formData.DataNasc || "0001-01-01",
+        numero: formData.Numero,
+        rua: formData.Rua,
+        cidade: formData.Cidade,
+        cep: cepDigits,
+        bairro: formData.Bairro,
+        estado: formData.Estado,
+        pais: formData.Pais,
+        complemento: formData.Complemento,
+        sexo: formData.Sexo,
+        tipoCliente: 1,
+        telefones: clienteTelefones.map((telefone) => ({
+          id: 0,
+          numero: telefone.Numero,
+          ddd: telefone.DDD,
+          clienteId,
+        })),
+        senha: "",
+      };
 
       const updateResult = await fetchJson(baseUrl, `/api/v1/clientes/${clienteId}`, {
         method: "PUT",
@@ -361,7 +460,7 @@ export default function CadastroPage() {
       });
 
       if (!updateResult.ok) {
-        setError(extractErrorMessage(updateResult.data) ?? "Cliente criado, mas nao foi possivel completar os dados.");
+        setError(extractErrorMessage(updateResult.data) ?? "Cliente criado, mas não foi possível completar os dados.");
         isSubmittingRef.current = false;
         setIsLoading(false);
         return;
@@ -383,7 +482,10 @@ export default function CadastroPage() {
       <div className="sigo-page">
       <NavBar />
       <main className="sigo-shell flex min-h-[calc(100vh-5rem)] items-center justify-center py-8 lg:py-12">
-        <div className="grid w-full max-w-6xl overflow-hidden rounded-2xl border border-[var(--sigo-border)] bg-white shadow-[var(--sigo-shadow-lg)] lg:grid-cols-[0.95fr_1.35fr] lg:divide-x lg:divide-[var(--sigo-border)]">
+        <div
+          className="sigo-registration-card grid w-full max-w-6xl overflow-hidden border border-[var(--sigo-border)] bg-white shadow-[var(--sigo-shadow-lg)] lg:grid-cols-[0.95fr_1.35fr] lg:divide-x lg:divide-[var(--sigo-border)]"
+          style={{ borderRadius: "1rem 0 0 1rem" }}
+        >
           <section className="flex flex-col justify-between bg-[linear-gradient(to_bottom_right,rgba(8,47,99,0.96),rgba(7,95,189,0.84)),url('https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&q=80')] bg-cover bg-center p-8 text-white lg:p-10">
             <div>
               <div className="mb-7 flex h-24 w-24 items-center justify-center lg:h-32 lg:w-32">
@@ -408,7 +510,7 @@ export default function CadastroPage() {
             </div>
           </section>
 
-          <section className="flex max-h-none flex-col bg-white lg:max-h-[calc(100vh-7rem)]">
+          <section className="flex min-h-0 flex-col bg-white">
             <div className="border-b border-[var(--sigo-border)] px-6 py-6 sm:px-8">
               <div className="mb-5 flex items-center gap-3 lg:hidden">
                 <span className="flex h-16 w-16 items-center justify-center">
@@ -419,19 +521,11 @@ export default function CadastroPage() {
                   />
                 </span>
                 <p className="text-sm font-semibold text-[var(--sigo-muted)]">
-                  Sistema de gestao de oficinas
+                  Sistema de gestão de oficinas
                 </p>
               </div>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="mt-2 text-3xl font-black text-[var(--sigo-text)]">
-                    {isOficinaMode ? "Cadastro de oficina" : "Cadastro de cliente"}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-[var(--sigo-muted)]">
-                    {isOficinaMode
-                      ? "Preencha os dados juridicos da oficina"
-                      : "Preencha os dados principais"}
-                  </p>
                 </div>
               </div>
               <div className="mt-5 grid gap-2 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-1 sm:grid-cols-2">
@@ -442,7 +536,10 @@ export default function CadastroPage() {
                       ? "sigo-button-primary"
                       : "bg-white text-[var(--sigo-text)]"
                   }`}
-                  onClick={() => setCadastroMode("cliente")}
+                  onClick={() => {
+                    setCadastroMode("cliente");
+                    setError(null);
+                  }}
                 >
                   Cliente
                 </button>
@@ -455,10 +552,7 @@ export default function CadastroPage() {
                   }`}
                   onClick={() => {
                     setCadastroMode("oficina");
-                    setFormData((prev) => ({
-                      ...prev,
-                      Documento: formatCnpj(prev.Documento),
-                    }));
+                    setError(null);
                   }}
                 >
                   Oficina
@@ -467,17 +561,18 @@ export default function CadastroPage() {
             </div>
 
             <form
-              className="sigo-scrollbar grid gap-5 overflow-y-auto p-6 sm:p-8"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
               onSubmit={handleSubmit}
             >
+              <div className="sigo-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-6 sm:p-8">
               <div className="grid gap-4 md:grid-cols-2">
                 <TextInput
-                  label="Nome"
+                  label={isOficinaMode ? "Nome da oficina" : "Nome completo"}
                   value={formData.Nome}
                   onChange={(value) => updateField("Nome", value)}
                 />
                 <TextInput
-                  label="Email"
+                  label="E-mail"
                   value={formData.Email}
                   onChange={(value) => updateField("Email", value)}
                   type="email"
@@ -487,28 +582,41 @@ export default function CadastroPage() {
                   value={formData.Documento}
                   onChange={(value) => updateField("Documento", value)}
                   placeholder={documentPlaceholder}
+                  helperText={
+                    isOficinaMode
+                      ? "Digite os 14 números do CNPJ; a pontuação é aplicada automaticamente."
+                      : "Digite os 11 números do CPF; a pontuação é aplicada automaticamente."
+                  }
                 />
                 <TextInput
                   label="Senha"
                   value={formData.senha}
                   onChange={(value) => updateField("senha", value)}
                   type="password"
+                  helperText="Entre 8 e 128 caracteres, com pelo menos uma letra e um número."
                 />
               </div>
 
               {!isOficinaMode ? (
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid items-start gap-4 md:grid-cols-2">
                   <TextInput
                     label="Telefone"
                     value={formData.Telefone}
                     onChange={(value) => updateField("Telefone", value)}
                     placeholder="(00) 00000-0000"
+                    helperText="Opcional. Informe DDD e 8 ou 9 dígitos."
+                  />
+                  <TextInput
+                    label="Data de nascimento"
+                    value={formData.DataNasc}
+                    onChange={(value) => updateField("DataNasc", value)}
+                    type="date"
                   />
                 </div>
               ) : null}
 
               {!isOficinaMode ? (
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid items-start gap-4 md:grid-cols-2">
                   <TextInput
                     label="Observação"
                     value={formData.Obs}
@@ -518,33 +626,7 @@ export default function CadastroPage() {
                     label="Razão social"
                     value={formData.razao}
                     onChange={(value) => updateField("razao", value)}
-                  />
-                  <TextInput
-                    label="Data de nascimento"
-                    value={formData.DataNasc}
-                    onChange={(value) => updateField("DataNasc", value)}
-                    type="date"
-                  />
-                </div>
-              ) : null}
-
-              {isOficinaMode ? (
-                <div className="grid gap-4 md:grid-cols-3">
-                  <TextInput
-                    label="ObservaÃ§Ã£o"
-                    value={formData.Obs}
-                    onChange={(value) => updateField("Obs", value)}
-                  />
-                  <TextInput
-                    label="RazÃ£o social"
-                    value={formData.razao}
-                    onChange={(value) => updateField("razao", value)}
-                  />
-                  <TextInput
-                    label="Data de nascimento"
-                    value={formData.DataNasc}
-                    onChange={(value) => updateField("DataNasc", value)}
-                    type="date"
+                    helperText="Opcional."
                   />
                 </div>
               ) : null}
@@ -584,9 +666,10 @@ export default function CadastroPage() {
                   onChange={(value) => updateField("Estado", value)}
                 />
                 <TextInput
-                  label="Pais"
-                  value={formData.Pais}
-                  onChange={(value) => updateField("Pais", value)}
+                  label="País"
+                  value="Brasil"
+                  onChange={() => undefined}
+                  disabled
                 />
                 <TextInput
                   label="Complemento"
@@ -595,7 +678,7 @@ export default function CadastroPage() {
                 />
               </div>
 
-              {isClienteCpf ? (
+              {!isOficinaMode ? (
                 <div className="grid gap-4 md:grid-cols-3">
                   <SelectField
                     label="Sexo"
@@ -611,8 +694,9 @@ export default function CadastroPage() {
                   {error}
                 </div>
               ) : null}
+              </div>
 
-              <div className="flex flex-col gap-3 border-t border-[var(--sigo-border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex shrink-0 flex-col gap-3 border-t border-[var(--sigo-border)] bg-white px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
                 <Link
                   className="text-sm font-bold text-[var(--sigo-muted)] hover:text-[var(--sigo-blue)]"
                   href={routes.login}

@@ -39,7 +39,7 @@ export default function LoginPage() {
         userRole.toLowerCase() === "cliente" ? routes.clientHome : routes.dashboard
       );
     } else {
-      setError(extractLoginError(result.data) ?? "Nao foi possivel entrar.");
+      setError(extractLoginError(result.data) ?? "Não foi possível entrar.");
     }
 
     setIsLoading(false);
@@ -61,7 +61,7 @@ export default function LoginPage() {
                 />
               </div>
               <p className="mt-4 text-lg font-bold text-white">
-                Oficina, clientes e serviços em um só paínel
+                Oficina, clientes e serviços em um só painel
               </p>
               <p className="mt-4 max-w-lg text-base leading-7 text-blue-50">
                 Acesse o ambiente administrativo para acompanhar cadastros,
@@ -102,10 +102,10 @@ export default function LoginPage() {
 
           <form className="grid gap-5 p-6" onSubmit={handleSubmit}>
             <TextInput
-              label="CPF/CNPJ ou E-mail"
+              label="CPF, CNPJ ou E-mail"
               value={identifier}
               onChange={setIdentifier}
-              placeholder="Cliente: CPF/CNPJ | Oficina/funcionario: e-mail"
+              placeholder="CPF, CNPJ ou E-mail"
             />
             <TextInput
               label="Senha"
@@ -128,7 +128,7 @@ export default function LoginPage() {
               {isLoading ? "Entrando..." : "Entrar"}
             </button>
 
-            <div className="flex flex-col gap-2 border-t border-[var(--sigo-border)] pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="-mx-6 flex flex-col gap-2 border-t border-[var(--sigo-border)] px-6 pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
               <span className="text-[var(--sigo-muted)]">
                 Ainda não tem conta?
               </span>

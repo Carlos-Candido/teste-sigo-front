@@ -14,7 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SIGO Admin",
+  title: "SIGO",
+  icons: {
+    icon: "/sigo-logo.ico",
+  },
   description: "SIGO minimal admin frontend",
 };
 
@@ -31,7 +34,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           {children}
-          <footer className="border-t border-white/10 bg-[#041f45] px-4 py-4 text-center text-xs font-medium text-blue-100">
+          <footer className="border-t border-white/10 bg-[linear-gradient(90deg,#082b4d,#0a354e,#082b4d)] px-4 py-4 text-center text-xs font-medium text-blue-100">
             © 2026 SIGO. Todos os direitos reservados.
           </footer>
         </AuthProvider>

@@ -9,7 +9,7 @@ export function NavBar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-gradient-to-r from-[var(--sigo-blue-deep)] via-[var(--sigo-blue-dark)] to-[var(--sigo-blue)] text-white shadow-[var(--sigo-shadow-md)]">
-      <div className="sigo-shell flex min-h-20 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="sigo-shell sigo-navbar-shell flex min-h-20 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href={token ? routes.dashboard : routes.login}
           className="flex min-w-0 items-center gap-3"
@@ -23,8 +23,8 @@ export function NavBar() {
             />
           </span>
           <span className="grid min-w-0">
-            <span className="truncate text-sm font-bold text-blue-100">
-              Sistema de Informatizacao e Gestao para Oficinas
+            <span className="truncate text-[0.9375rem] font-bold text-blue-100">
+              Sistema de Informatização e Gestão para Oficinas
             </span>
           </span>
         </Link>
@@ -32,8 +32,8 @@ export function NavBar() {
         <div className="flex flex-wrap items-center gap-3 sm:justify-end">
           {token ? (
             <>
-              <span className="text-sm font-bold text-blue-50">
-                {`Ola, ${userName || "usuario"}`}
+              <span className="text-[0.9375rem] font-bold text-blue-50">
+                {`Olá, ${userName || "usuario"}`}
               </span>
               <Link
                 href={routes.profile}
@@ -57,7 +57,7 @@ export function NavBar() {
               </Link>
               <button
                 type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white shadow-sm hover:bg-white hover:text-[var(--sigo-blue-deep)]"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-red-400 hover:bg-red-500/10 hover:text-red-300"
                 onClick={logout}
                 aria-label="Sair"
                 title="Sair"

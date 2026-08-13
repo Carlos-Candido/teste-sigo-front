@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useMinimumLoading } from "@/hooks/useMinimumLoading";
 import { fetchJson } from "@/lib/api";
 import { fetchCepAddress } from "@/lib/cep";
+import { fetchAllDashboardRecords } from "@/lib/dashboardData";
 import type { CrudConfig } from "@/components/CrudPanel";
 import { entityConfigs } from "@/models/entityConfigs";
 import {
@@ -12,7 +14,8 @@ import {
   normalizeRole,
   type EntityCapability,
 } from "@/lib/accessControl";
-import { DashboardTabs } from "@/components/Dashboard/DashboardTabs";
+import { DashboardSidebar } from "@/components/Dashboard/DashboardSidebar";
+import { SigoLoader } from "@/components/Loading/SigoLoader";
 import { NavBar } from "@/components/Sidebar/NavBar";
 import { ProtectedRoute } from "@/components/Auth/RouteGuards";
 import {
@@ -20,7 +23,6 @@ import {
   findRelationLabel,
   formatCep,
   formatCpf,
-  formatCpfCnpj,
   formatCnpj,
   formatPhone,
   formatEnumValue,
@@ -41,6 +43,7 @@ import {
 } from "@/lib/fieldMetadata";
 
 type FormMode = "create" | "edit" | "view";
+type DiscountType = "percent" | "money";
 type FormValue = Record<string, unknown>;
 type BuildPayloadOptions = {
   includeArrays?: boolean;
@@ -66,7 +69,25 @@ const managementKeys = [
   "pedidos",
 ];
 
-const PAGE_SIZE = 45;
+const PAGE_SIZE = 10;
+
+const normalizeVehicleStatus = (value: unknown): number => {
+  const numericValue = Number(value);
+  if (Number.isInteger(numericValue) && numericValue >= 0 && numericValue <= 3) {
+    return numericValue;
+  }
+
+  const statuses: Record<string, number> = {
+    pendente: 0,
+    aguardandopecas: 1,
+    emandamento: 2,
+    concluido: 3,
+  };
+  return statuses[normalizeFieldKey(String(value ?? ""))] ?? 0;
+};
+
+const normalizeWorkflowStatus = (value: unknown): number =>
+  normalizeVehicleStatus(value);
 
 const parentIdFieldByList: Record<string, string> = {
   telefones: "ClienteId",
@@ -86,9 +107,78 @@ const partConditionOptions: SelectOption[] = [
   { value: "Danificada", label: "Danificada" },
 ];
 
+const workflowStatusOptions: SelectOption[] = [
+  { value: 0, label: "Pendente" },
+  { value: 1, label: "Aguardando peças" },
+  { value: 2, label: "Em andamento" },
+  { value: 3, label: "Concluído" },
+];
+
+const editableOptionsByField: Record<string, string[]> = {
+  tipoveiculo: [
+    "Automóvel", "Motocicleta", "Caminhonete", "Picape", "Van", "Furgão",
+    "Caminhão", "Ônibus", "Trator", "Máquina agrícola", "Outro",
+  ],
+  combustivel: [
+    "Gasolina", "Etanol", "Flex (Gasolina/Etanol)", "Diesel", "Diesel S-10",
+    "Diesel S-500", "GNV", "GLP", "Biodiesel", "Biometano", "Hidrogênio",
+    "Elétrico", "Híbrido", "Outro",
+  ],
+  cor: [
+    "Branco", "Preto", "Prata", "Cinza", "Vermelho", "Azul", "Verde",
+    "Amarelo", "Laranja", "Marrom", "Bege", "Dourado", "Roxo", "Rosa", "Vinho",
+  ],
+  cargo: [
+    "Administrador", "Gerente", "Supervisor", "Mecânico", "Eletricista",
+    "Funileiro", "Pintor", "Borracheiro", "Consultor de Serviços",
+    "Recepcionista", "Estoquista", "Vendedor de Peças", "Auxiliar de Mecânico",
+    "Auxiliar Administrativo",
+  ],
+  tipomarca: [
+    "Marca de veículo", "Marca de peça", "Marca de pneu", "Marca de lubrificante",
+    "Marca de bateria", "Marca de ferramenta", "Marca de equipamento",
+    "Marca de acessório", "Outros",
+  ],
+  tipopeca: [
+    "Amortecedor", "Bateria", "Bico injetor", "Bobina de ignição", "Bomba d'água",
+    "Bomba de combustível", "Bomba de óleo", "Bucha", "Cabo de vela",
+    "Caixa de direção", "Catalisador", "Cilindro mestre", "Correia dentada",
+    "Correia de acessórios", "Disco de embreagem", "Disco de freio", "Filtro de ar",
+    "Filtro de combustível", "Filtro de óleo", "Filtro de cabine", "Junta do cabeçote",
+    "Junta homocinética", "Lâmpada", "Mangueira", "Motor de partida",
+    "Pastilha de freio", "Pivô", "Platô de embreagem", "Radiador",
+    "Rolamento de roda", "Sensor de rotação", "Sensor de temperatura", "Sonda lambda",
+    "Tambor de freio", "Terminal de direção", "Válvula termostática",
+    "Vela de ignição", "Palheta do limpador", "Pneu",
+  ],
+};
+
+const getEditableFieldOptions = (entityKey: string, key: string): string[] | null => {
+  const normalized = normalizeFieldKey(key);
+  if (entityKey === "pecas" && normalized === "tipo") {
+    return editableOptionsByField.tipopeca;
+  }
+  return editableOptionsByField[normalized] ?? null;
+};
+
+const normalizeSpecialTextField = (key: string, value: string): string => {
+  const normalized = normalizeFieldKey(key);
+  if (normalized === "placaveiculo") {
+    return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
+  }
+  if (normalized === "chassiveiculo") {
+    return value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "").slice(0, 17);
+  }
+  if (normalized === "seguro") {
+    return value.replace(/[^A-Za-z0-9./-]/g, "").slice(0, 30);
+  }
+  return value;
+};
+
 const hiddenFieldByEntity: Record<string, string[]> = {
   clientes: ["senha"],
   funcionarios: ["senha"],
+  pecas: ["quantidadeestoque"],
 };
 
 const imageUploadPathByEntity: Record<string, (id: number) => string> = {
@@ -103,10 +193,59 @@ const shouldHideFieldForEntity = (entityKey: string, key: string): boolean =>
   (hiddenFieldByEntity[entityKey] ?? []).includes(normalizeFieldKey(key));
 
 const shouldCreateWithArrays = (entityKey: string): boolean =>
-  entityKey === "servicos";
+  entityKey === "servicos" || entityKey === "clientes";
+
+const getCreateTemplate = (config: CrudConfig): Record<string, unknown> =>
+  config.createTemplate ?? config.template;
+
+const applyPieceStockTotal = (payload: unknown): unknown => {
+  if (!isPlainObject(payload)) return payload;
+  const quantity = Math.floor(
+    Math.max(0, Number(getRecordValue(payload, "Quantidade")) || 0)
+  );
+  const unit = Math.max(0, Number(getRecordValue(payload, "Unidade")) || 0);
+  return {
+    ...payload,
+    Quantidade: quantity,
+    quantidadeEstoque: quantity * unit,
+  };
+};
+
+const normalizePieceFormRecord = (record: FormValue): FormValue => {
+  const stock = Number(
+    getRecordValue(record, "quantidadeEstoque") ??
+      getRecordValue(record, "Quantidade_Estoque")
+  );
+  const unit = Number(getRecordValue(record, "Unidade"));
+  if (!Number.isFinite(stock) || !Number.isFinite(unit) || unit <= 0) {
+    return record;
+  }
+  return {
+    ...record,
+    Quantidade: Math.floor(stock / unit),
+  };
+};
 
 const getDeleteActionLabel = (entityKey: string): string =>
   entityKey === "clientes" ? "Inativar" : "Excluir";
+
+const getVehicleValidationError = (data: FormValue): string | null => {
+  const plate = String(getRecordValue(data, "PlacaVeiculo") ?? "").toUpperCase();
+  const chassis = String(getRecordValue(data, "ChassiVeiculo") ?? "").toUpperCase();
+  const insurance = String(getRecordValue(data, "Seguro") ?? "");
+  const validPlate = /^(?:[A-Z]{3}[0-9][A-Z][0-9]{2}|[A-Z]{3}[0-9]{4})$/;
+
+  if (!validPlate.test(plate)) {
+    return "Informe uma placa válida no padrão ABC1D23 ou ABC1234.";
+  }
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(chassis)) {
+    return "O chassi deve ter exatamente 17 letras maiúsculas e números, sem I, O ou Q.";
+  }
+  if (!/^[A-Za-z0-9./-]{5,30}$/.test(insurance)) {
+    return "O seguro deve ter entre 5 e 30 caracteres: letras, números, ponto, barra ou hífen.";
+  }
+  return null;
+};
 
 const fieldLabels: Record<string, string> = {
   id: "ID",
@@ -115,7 +254,7 @@ const fieldLabels: Record<string, string> = {
   senha: "Senha",
   cpf: "CPF",
   cnpj: "CNPJ",
-  cpfcnpj: "CPF/CNPJ",
+  cpfcnpj: "CPF",
   obs: "Observação",
   razao: "Razão",
   datanasc: "Data de nascimento",
@@ -182,6 +321,28 @@ const fieldLabels: Record<string, string> = {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const getApiErrorMessage = (data: unknown, fallback: string): string => {
+  if (!isPlainObject(data)) return fallback;
+
+  const errors = data.errors ?? data.Errors;
+  if (isPlainObject(errors)) {
+    const messages = Object.values(errors).flatMap((value) =>
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : typeof value === "string"
+          ? [value]
+          : []
+    );
+    if (messages.length > 0) return messages.join(" | ");
+  }
+
+  const message = data.Message ?? data.message ?? data.detail ?? data.title;
+  return typeof message === "string" && message.trim() ? message : fallback;
+};
+
+const isObservationField = (key: string): boolean =>
+  ["obs", "observacao", "observacoes"].includes(normalizeFieldKey(key));
+
 const getRecordValue = (record: Record<string, unknown>, key: string) => {
   if (key in record) return record[key];
   const normalized = normalizeFieldKey(key);
@@ -191,8 +352,32 @@ const getRecordValue = (record: Record<string, unknown>, key: string) => {
   return matchedKey ? record[matchedKey] : undefined;
 };
 
+const getRecordKey = (record: Record<string, unknown>, key: string): string => {
+  const normalized = normalizeFieldKey(key);
+  return (
+    Object.keys(record).find(
+      (candidate) => normalizeFieldKey(candidate) === normalized
+    ) ?? key
+  );
+};
+
 const cloneTemplate = (value: Record<string, unknown>): FormValue =>
   JSON.parse(JSON.stringify(value)) as FormValue;
+
+const createEmptyListForm = (template: Record<string, unknown>): FormValue => {
+  const clearLists = (value: unknown): unknown => {
+    if (Array.isArray(value)) return [];
+    if (!isPlainObject(value)) return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [
+        key,
+        clearLists(nestedValue),
+      ])
+    );
+  };
+
+  return clearLists(cloneTemplate(template)) as FormValue;
+};
 
 const mergeWithTemplate = (template: unknown, value: unknown): unknown => {
   if (Array.isArray(template)) {
@@ -271,10 +456,17 @@ const buildPayload = (
 
       const normalizedKey = normalizeFieldKey(key);
       const payloadValue =
-        normalizeFieldKey(options.parentListKey ?? "") === "telefones" &&
+        normalizedKey === "pais"
+          ? "Brasil"
+          : normalizeFieldKey(options.parentListKey ?? "") === "telefones" &&
         normalizedKey === "numero"
           ? onlyDigits(getRecordValue(recordValue, key))
-          : buildPayload(template[key], recordValue[key], key, options);
+          : buildPayload(
+              template[key],
+              getRecordValue(recordValue, key),
+              key,
+              options
+            );
       if (payloadValue !== undefined) result[key] = payloadValue;
     });
 
@@ -454,7 +646,7 @@ const formatValue = (
   if (isStateField(key)) return formatStateValue(value);
 
   const normalized = normalizeFieldKey(key);
-  if (normalized.includes("cpfcnpj")) return formatCpfCnpj(value);
+  if (normalized.includes("cpfcnpj")) return formatCpf(value);
   if (normalized.includes("cpf") && !normalized.includes("cnpj")) return formatCpf(value);
   if (normalized.includes("cnpj")) return formatCnpj(value);
   if (normalized === "cep") return formatCep(value);
@@ -495,6 +687,7 @@ const getInputType = (key: string, templateValue: unknown): string => {
   }
   if (loweredKey.includes("senha")) return "password";
   if (loweredKey.includes("email")) return "email";
+  if (normalized === "datanasc") return "date";
   if (typeof templateValue === "number") return "number";
   if (
     typeof templateValue === "string" &&
@@ -507,7 +700,8 @@ const getInputType = (key: string, templateValue: unknown): string => {
 
 const getFieldOptions = (
   key: string,
-  path: Array<string | number> = []
+  path: Array<string | number> = [],
+  entityKey = ""
 ): SelectOption[] | null => {
   const isPartOrderState = path.some(
     (part) =>
@@ -517,6 +711,9 @@ const getFieldOptions = (
     return partConditionOptions;
   }
   if (isStateField(key)) return stateOptions;
+  if (entityKey === "pedidos" && normalizeFieldKey(key) === "status") {
+    return workflowStatusOptions;
+  }
   return getEnumOptions(key);
 };
 
@@ -532,6 +729,94 @@ const getDisplayKeys = (
 
   if (!keys.includes("Id")) keys.unshift("Id");
   return keys.slice(0, 6);
+};
+
+type TableColumn = {
+  key: string;
+  label: string;
+  relationKey?: string;
+  currency?: boolean;
+  status?: "situacao" | "workflow";
+};
+
+const tableColumnsByEntity: Record<string, TableColumn[]> = {
+  clientes: [
+    { key: "Id", label: "ID" },
+    { key: "Nome", label: "Nome" },
+    { key: "Cpf_Cnpj", label: "CPF" },
+    { key: "Situacao", label: "Status", status: "situacao" },
+  ],
+  veiculos: [
+    { key: "Id", label: "ID" },
+    { key: "NomeVeiculo", label: "Nome" },
+    { key: "ClienteId", label: "Nome do cliente", relationKey: "ClienteId" },
+    { key: "Status", label: "Status", status: "workflow" },
+  ],
+  funcionarios: [
+    { key: "Id", label: "ID" },
+    { key: "Nome", label: "Nome" },
+    { key: "Cpf", label: "CPF" },
+    { key: "Cargo", label: "Cargo" },
+    { key: "Situacao", label: "Status", status: "situacao" },
+  ],
+  marcas: [
+    { key: "Id", label: "ID" },
+    { key: "Nome", label: "Nome" },
+    { key: "TipoMarca", label: "Tipo" },
+  ],
+  servicos: [
+    { key: "Id", label: "ID" },
+    { key: "Nome", label: "Nome" },
+    { key: "Valor", label: "Valor", currency: true },
+  ],
+  pecas: [
+    { key: "Id", label: "ID" },
+    { key: "Nome", label: "Nome" },
+    { key: "Valor", label: "Valor", currency: true },
+    { key: "Quantidade", label: "Quantidade" },
+  ],
+  pedidos: [
+    { key: "Id", label: "ID" },
+    { key: "idCliente", label: "Nome do cliente", relationKey: "idCliente" },
+    { key: "idVeiculo", label: "Nome do veículo", relationKey: "idVeiculo" },
+    { key: "Status", label: "Status", status: "workflow" },
+    { key: "ValorTotal", label: "Valor", currency: true },
+  ],
+};
+
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+const statusPresentation = (
+  value: unknown,
+  kind: "situacao" | "workflow"
+): { label: string; className: string } => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  if (kind === "situacao") {
+    const active = normalized === "1" || normalized === "ativo";
+    return active
+      ? { label: "Ativo", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
+      : { label: "Inativo", className: "border-red-200 bg-red-50 text-red-700" };
+  }
+
+  const workflowStatuses: Record<string, { label: string; className: string }> = {
+    "0": { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" },
+    pendente: { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" },
+    "1": { label: "Aguardando peças", className: "border-orange-200 bg-orange-50 text-orange-700" },
+    aguardandopecas: { label: "Aguardando peças", className: "border-orange-200 bg-orange-50 text-orange-700" },
+    "2": { label: "Em andamento", className: "border-blue-200 bg-blue-50 text-blue-700" },
+    emandamento: { label: "Em andamento", className: "border-blue-200 bg-blue-50 text-blue-700" },
+    "3": { label: "Concluído", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+    concluido: { label: "Concluído", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  };
+
+  return workflowStatuses[normalizeFieldKey(normalized)] ?? {
+    label: String(value ?? "-"),
+    className: "border-slate-200 bg-slate-50 text-slate-700",
+  };
 };
 
 const setAtPath = (
@@ -557,7 +842,7 @@ const setAtPath = (
   };
 };
 
-type RelationComboFieldProps = {
+type RelationSearchFieldProps = {
   label: string;
   value: unknown;
   options: RelationOption[];
@@ -565,88 +850,148 @@ type RelationComboFieldProps = {
   disabled?: boolean;
 };
 
-function RelationComboField({
+const RELATION_PAGE_SIZE = 10;
+
+function RelationSearchField({
   label,
   value,
   options,
   onChange,
   disabled = false,
-}: RelationComboFieldProps) {
+}: RelationSearchFieldProps) {
   const selectedOption = options.find(
     (option) => String(option.value) === String(value)
   );
-  const [query, setQuery] = useState(selectedOption?.label ?? "");
+  const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    setQuery(selectedOption?.label ?? "");
-  }, [selectedOption?.label, value]);
+    setPage(1);
+  }, [query]);
 
   const filteredOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    const filtered = normalizedQuery
+    return normalizedQuery
       ? options.filter((option) => {
           const label = option.label.toLowerCase();
           const optionValue = String(option.value).toLowerCase();
           return label.includes(normalizedQuery) || optionValue.includes(normalizedQuery);
         })
       : options;
-
-    return filtered.slice(0, 10);
   }, [options, query]);
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredOptions.length / RELATION_PAGE_SIZE)
+  );
+  const currentPage = Math.min(page, totalPages);
+  const visibleOptions = filteredOptions.slice(
+    (currentPage - 1) * RELATION_PAGE_SIZE,
+    currentPage * RELATION_PAGE_SIZE
+  );
+
+  const openSearch = () => {
+    if (disabled) return;
+    setQuery("");
+    setPage(1);
+    setIsOpen(true);
+  };
+
   return (
-    <label className="sigo-label relative rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3">
+    <div className="sigo-label rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3">
       <span>{label}</span>
-      <input
-        className="sigo-input"
-        type="text"
-        value={query}
-        placeholder="Digite para buscar"
-        autoComplete="off"
+      <button
+        type="button"
+        className="sigo-input flex items-center justify-between gap-3 bg-white text-left"
         disabled={disabled}
-        onFocus={() => {
-          if (!disabled) setIsOpen(true);
-        }}
-        onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
-        onChange={(event) => {
-          if (disabled) return;
-          const nextQuery = event.target.value;
-          setQuery(nextQuery);
-          setIsOpen(true);
-          if (!nextQuery.trim()) onChange("");
-        }}
-      />
+        onClick={openSearch}
+      >
+        <span className={selectedOption ? "text-[var(--sigo-text)]" : "text-[var(--sigo-muted)]"}>
+          {selectedOption?.label ??
+            (value && Number(value) > 0 ? `Registro #${String(value)}` : "Selecionar registro")}
+        </span>
+        <span aria-hidden="true" className="text-lg text-[var(--sigo-blue)]">⌕</span>
+      </button>
       {isOpen ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-50 max-h-64 overflow-auto rounded-lg border border-[var(--sigo-border)] bg-white p-1 shadow-[var(--sigo-shadow-lg)]">
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
-              <button
-                key={String(option.value)}
-                type="button"
-                className={`w-full rounded-md px-3 py-2 text-left text-sm font-semibold ${
-                  String(option.value) === String(value)
-                    ? "bg-[var(--sigo-blue)] text-white"
-                    : "text-[var(--sigo-text)] hover:bg-[var(--sigo-surface-soft)]"
-                }`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onChange(String(option.value));
-                  setQuery(option.label);
-                  setIsOpen(false);
-                }}
-              >
-                {option.label}
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Pesquisar ${label}`}
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setIsOpen(false);
+          }}
+        >
+          <div className="sigo-card w-full max-w-md overflow-hidden bg-white shadow-[var(--sigo-shadow-lg)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[var(--sigo-border)] px-4 py-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-[var(--sigo-soft)]">
+                  Selecionar registro
+                </p>
+                <h3 className="mt-1 text-lg font-black text-[var(--sigo-text)]">{label}</h3>
+              </div>
+              <button type="button" className="sigo-button h-10 min-h-0 w-10 p-0" onClick={() => setIsOpen(false)} aria-label="Fechar pesquisa">
+                ×
               </button>
-            ))
-          ) : (
-            <p className="px-3 py-2 text-sm font-medium text-[var(--sigo-muted)]">
-              Nenhum registro encontrado.
-            </p>
-          )}
+            </div>
+
+            <div className="p-4">
+              <input
+                className="sigo-input bg-white"
+                type="search"
+                value={query}
+                placeholder="Pesquisar por nome ou código"
+                autoFocus
+                onChange={(event) => setQuery(event.target.value)}
+              />
+
+              <div className="sigo-scrollbar mt-3 grid max-h-80 content-start gap-2 overflow-y-auto pr-1">
+                {visibleOptions.length > 0 ? (
+                  visibleOptions.map((option) => {
+                    const isSelected = String(option.value) === String(value);
+                    return (
+                      <button
+                        key={String(option.value)}
+                        type="button"
+                        className={`flex min-h-10 w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-bold ${
+                          isSelected
+                            ? "border-[var(--sigo-blue)] bg-[var(--sigo-blue-soft)] text-[var(--sigo-blue-deep)]"
+                            : "border-[var(--sigo-border)] bg-white text-[var(--sigo-text)] hover:border-[var(--sigo-blue)] hover:bg-[var(--sigo-surface-soft)]"
+                        }`}
+                        onClick={() => {
+                          onChange(String(option.value));
+                          setIsOpen(false);
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        <span className="text-xs text-[var(--sigo-muted)]">#{option.value}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="flex min-h-20 items-center justify-center text-sm font-semibold text-[var(--sigo-muted)]">
+                    Nenhum registro encontrado.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--sigo-border)] pt-3">
+                <button type="button" className="sigo-button min-h-10 px-3" disabled={currentPage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                  Anterior
+                </button>
+                <span className="text-xs font-bold text-[var(--sigo-muted)]">
+                  Página {currentPage} de {totalPages} · {filteredOptions.length} registro(s)
+                </span>
+                <button type="button" className="sigo-button min-h-10 px-3" disabled={currentPage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+                  Próxima
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
-    </label>
+    </div>
   );
 }
 
@@ -674,10 +1019,23 @@ export default function GerenciaPage() {
     : false;
   const [items, setItems] = useState<FormValue[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { isVisible: showLoading, cycle: loadingCycle } = useMinimumLoading(
+    isLoading,
+    500
+  );
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [stockAdjustmentItem, setStockAdjustmentItem] = useState<FormValue | null>(null);
+  const [stockAdjustmentAmount, setStockAdjustmentAmount] = useState(1);
+  const [stockAdjustmentSaving, setStockAdjustmentSaving] = useState(false);
+  const [vehicleStatus, setVehicleStatus] = useState(0);
+  const [pedidoStatus, setPedidoStatus] = useState(0);
+  const [originalPedidoPieceQuantities, setOriginalPedidoPieceQuantities] = useState<Record<string, number>>({});
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [discountType, setDiscountType] = useState<DiscountType>("percent");
+  const [discountValue, setDiscountValue] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [lastCepLookup, setLastCepLookup] = useState("");
@@ -690,6 +1048,232 @@ export default function GerenciaPage() {
   const [relationOptions, setRelationOptions] = useState<RelationOptionsMap>(
     {}
   );
+  const [loggedOficinaName, setLoggedOficinaName] = useState("");
+
+  const pedidoTotals = useMemo(() => {
+    if (selectedConfig?.key !== "pedidos") {
+      return { pieces: 0, services: 0, gross: 0, discount: 0, total: 0 };
+    }
+
+    const getPrice = (entityKey: string, id: unknown) => {
+      const option = (relationOptions[entityKey] ?? []).find(
+        (candidate) => String(candidate.value) === String(id)
+      );
+      return Number(
+        option?.item ? getRecordValue(option.item, "Valor") ?? 0 : 0
+      );
+    };
+    const getPieceUnitPrice = (id: unknown) => {
+      const option = (relationOptions.pecas ?? []).find(
+        (candidate) => String(candidate.value) === String(id)
+      );
+      if (!option?.item) return 0;
+      return Math.max(0, Number(getRecordValue(option.item, "Valor")) || 0);
+    };
+    const pieceItems = getRecordValue(formData, "Pedido_Pecas");
+    const serviceItems = getRecordValue(formData, "Pedido_Servicos");
+    const pieces = (Array.isArray(pieceItems) ? pieceItems : []).reduce(
+      (total, item) =>
+        total +
+        (isPlainObject(item)
+          ? getPieceUnitPrice(getRecordValue(item, "IdPeca")) *
+            Math.max(0, Number(getRecordValue(item, "Quantidade")) || 0)
+          : 0),
+      0
+    );
+    const services = (Array.isArray(serviceItems) ? serviceItems : []).reduce(
+      (total, item) =>
+        total +
+        (isPlainObject(item)
+          ? getPrice("servicos", getRecordValue(item, "IdServico")) *
+            Math.max(0, Number(getRecordValue(item, "QuantVezes")) || 0)
+          : 0),
+      0
+    );
+    const gross = pieces + services;
+    const requestedDiscount = discountEnabled
+      ? discountType === "percent"
+        ? gross * (Math.min(100, Math.max(0, discountValue)) / 100)
+        : Math.max(0, discountValue)
+      : 0;
+    const discount = Math.min(gross, requestedDiscount);
+
+    return {
+      pieces,
+      services,
+      gross,
+      discount,
+      total: Math.max(0, gross - discount),
+    };
+  }, [discountEnabled, discountType, discountValue, formData, relationOptions, selectedConfig?.key]);
+
+  const getPedidoPieceQuantities = (source: FormValue): Record<string, number> => {
+    const lines =
+      getRecordValue(source, "Pedido_Pecas") ??
+      getRecordValue(source, "PedidoPecas");
+    return (Array.isArray(lines) ? lines : []).reduce<Record<string, number>>(
+      (totals, line) => {
+        if (!isPlainObject(line)) return totals;
+        const pieceId = String(getRecordValue(line, "IdPeca") ?? "");
+        if (!pieceId) return totals;
+        totals[pieceId] =
+          (totals[pieceId] ?? 0) +
+          Math.max(0, Number(getRecordValue(line, "Quantidade")) || 0);
+        return totals;
+      },
+      {}
+    );
+  };
+
+  const updateStockFromPedido = async (
+    previousQuantities: Record<string, number>
+  ): Promise<boolean> => {
+    const nextQuantities = getPedidoPieceQuantities(formData);
+    const pieceIds = new Set([
+      ...Object.keys(previousQuantities),
+      ...Object.keys(nextQuantities),
+    ]);
+    const changes = [...pieceIds]
+      .map((pieceId) => ({
+        pieceId,
+        delta: (nextQuantities[pieceId] ?? 0) - (previousQuantities[pieceId] ?? 0),
+      }))
+      .filter(({ delta }) => delta !== 0);
+
+    if (changes.length === 0) return true;
+
+    for (const { pieceId, delta } of changes) {
+      const option = (relationOptions.pecas ?? []).find(
+        (candidate) => String(candidate.value) === pieceId
+      );
+      if (!option?.item) {
+        setError(`Pedido salvo, mas não foi possível localizar a peça #${pieceId} para atualizar o estoque.`);
+        return false;
+      }
+
+      const currentStock = Number(
+        getRecordValue(option.item, "quantidadeEstoque") ??
+          getRecordValue(option.item, "Quantidade_Estoque")
+      );
+      const unit = Math.max(1, Number(getRecordValue(option.item, "Unidade")) || 1);
+      const normalizedStock = Number.isFinite(currentStock)
+        ? currentStock
+        : (Number(getRecordValue(option.item, "Quantidade")) || 0) * unit;
+      const nextStock = normalizedStock - delta;
+
+      if (nextStock < 0) {
+        setError(`Estoque insuficiente para ${option.label}. Disponível: ${normalizedStock} unidade(s).`);
+        return false;
+      }
+
+      const basePiecePayload = buildPayload(
+        entityConfigs.find((config) => config.key === "pecas")?.template ?? {},
+        {
+          ...option.item,
+          Quantidade: Math.floor(nextStock / unit),
+          quantidadeEstoque: nextStock,
+        },
+        "",
+        { includeArrays: true, entityKey: "pecas", formMode: "edit" }
+      );
+      const piecePayload = isPlainObject(basePiecePayload)
+        ? {
+            ...basePiecePayload,
+            Quantidade: Math.floor(nextStock / unit),
+            quantidadeEstoque: nextStock,
+          }
+        : basePiecePayload;
+      const result = await fetchJson(baseUrl, `/api/v1/pecas/${pieceId}`, {
+        method: "PUT",
+        headers: authHeaders,
+        body: piecePayload,
+      });
+
+      if (!result.ok) {
+        setError(
+          `Pedido salvo, mas falha ao atualizar o estoque de ${option.label}: ${getApiErrorMessage(
+            result.data,
+            `erro ${result.status}`
+          )}`
+        );
+        return false;
+      }
+    }
+
+    setOriginalPedidoPieceQuantities(nextQuantities);
+    return true;
+  };
+
+  const validatePedidoStock = (
+    previousQuantities: Record<string, number>
+  ): string | null => {
+    const nextQuantities = getPedidoPieceQuantities(formData);
+    for (const [pieceId, requestedQuantity] of Object.entries(nextQuantities)) {
+      const option = (relationOptions.pecas ?? []).find(
+        (candidate) => String(candidate.value) === pieceId
+      );
+      if (!option?.item) return `Não foi possível verificar o estoque da peça #${pieceId}.`;
+
+      const rawStock = Number(
+        getRecordValue(option.item, "quantidadeEstoque") ??
+          getRecordValue(option.item, "Quantidade_Estoque")
+      );
+      const unit = Math.max(1, Number(getRecordValue(option.item, "Unidade")) || 1);
+      const currentStock = Number.isFinite(rawStock)
+        ? rawStock
+        : (Number(getRecordValue(option.item, "Quantidade")) || 0) * unit;
+      const availableForOrder = currentStock + (previousQuantities[pieceId] ?? 0);
+
+      if (requestedQuantity > availableForOrder) {
+        return `${option.label}: quantidade solicitada (${requestedQuantity}) maior que o estoque disponível (${availableForOrder}).`;
+      }
+      if (currentStock <= 0 && requestedQuantity > (previousQuantities[pieceId] ?? 0)) {
+        return `${option.label} está sem estoque e não pode ser adicionada ao pedido.`;
+      }
+    }
+    return null;
+  };
+
+  const applyPedidoTotals = (payload: unknown): unknown => {
+    if (selectedConfig?.key !== "pedidos" || !isPlainObject(payload)) return payload;
+
+    const submittedDiscount = discountEnabled
+      ? discountType === "percent"
+        ? Math.min(100, Math.max(0, discountValue))
+        : Math.min(pedidoTotals.gross, Math.max(0, discountValue))
+      : 0;
+
+    const withoutCalculatedFields = Object.fromEntries(
+      Object.entries(payload).filter(
+        ([key]) =>
+          ![
+            "valortotal",
+            "descontoreais",
+            "descontoporcentagem",
+            "descontototalreais",
+            "descontoservicoporcentagem",
+            "descontoservicoreais",
+            "descontopecaporcentagem",
+            "descontopecareais",
+          ].includes(normalizeFieldKey(key))
+      )
+    );
+
+    return {
+      ...withoutCalculatedFields,
+      ValorTotal: Math.round((pedidoTotals.total + Number.EPSILON) * 100) / 100,
+      DescontoReais:
+        discountEnabled && discountType === "money" ? submittedDiscount : 0,
+      DescontoPorcentagem:
+        discountEnabled && discountType === "percent" ? submittedDiscount : 0,
+      DescontoTotalReais:
+        Math.round((pedidoTotals.discount + Number.EPSILON) * 100) / 100,
+      DescontoServicoPorcentagem: 0,
+      DescontoServicoReais: 0,
+      DescontoPecaPorcentagem: 0,
+      descontoPecaReais: 0,
+    };
+  };
 
   const authHeaders = useMemo(
     () => (token ? { Authorization: `Bearer ${token}` } : undefined),
@@ -750,10 +1334,23 @@ export default function GerenciaPage() {
 
   useEffect(() => {
     if (!entities.length) return;
-    if (!entities.some((config) => config.key === selectedKey)) {
-      setSelectedKey(entities[0].key);
-    }
-  }, [entities, selectedKey]);
+    const requestedKey = new URLSearchParams(window.location.search).get("entidade");
+    setSelectedKey((currentKey) => {
+      if (requestedKey && entities.some((config) => config.key === requestedKey)) {
+        return requestedKey;
+      }
+      return entities.some((config) => config.key === currentKey)
+        ? currentKey
+        : entities[0].key;
+    });
+  }, [entities]);
+
+  const selectEntity = (key: string) => {
+    setSelectedKey(key);
+    setSearchTerm("");
+    setCurrentPage(1);
+    setShowForm(false);
+  };
 
   const applyLoggedOficina = (data: FormValue): FormValue => {
     if (!selectedCapability?.scopeToOwnOffice || !oficinaId) return data;
@@ -823,15 +1420,41 @@ export default function GerenciaPage() {
     );
     const entries = await Promise.all(
       configs.map(async (config) => {
-        const result = await fetchJson(baseUrl, config.listPath as string, {
+        const listPath = config.listPath as string;
+        const paginationSeparator = listPath.includes("?") ? "&" : "?";
+        const getPagePath = (page: number) =>
+          `${listPath}${paginationSeparator}page=${page}&pageSize=100`;
+        const result = await fetchJson(baseUrl, getPagePath(1), {
           method: "GET",
           headers: authHeaders,
         });
 
         if (!result.ok) return [config.key, []] as const;
 
+        const totalPages = isPlainObject(result.data)
+          ? Number(getRecordValue(result.data, "totalPages")) || 1
+          : 1;
+        const remainingPages =
+          totalPages > 1
+            ? await Promise.all(
+                Array.from({ length: totalPages - 1 }, (_, index) => index + 2).map(
+                  (page) =>
+                    fetchJson(baseUrl, getPagePath(page), {
+                      method: "GET",
+                      headers: authHeaders,
+                    })
+                )
+              )
+            : [];
+        const relationItems = [
+          ...extractList(result.data),
+          ...remainingPages.flatMap((pageResult) =>
+            pageResult.ok ? extractList(pageResult.data) : []
+          ),
+        ];
+
         const capability = getEntityCapability(userRole, config.key);
-        const options = extractList(result.data)
+        const options = relationItems
           .filter((item) => isRecordInOwnOffice(item, capability, oficinaId))
           .map((item) => {
             const id = getRecordId(item);
@@ -855,7 +1478,15 @@ export default function GerenciaPage() {
     if (!selectedConfig) return;
     setFormMode("create");
     setEditingId(null);
-    setFormData(applyLoggedOficina(cloneTemplate(selectedConfig.template)));
+    setVehicleStatus(0);
+    setPedidoStatus(0);
+    setOriginalPedidoPieceQuantities({});
+    setDiscountEnabled(false);
+    setDiscountType("percent");
+    setDiscountValue(0);
+    setFormData(
+      applyLoggedOficina(createEmptyListForm(getCreateTemplate(selectedConfig)))
+    );
     setImageFiles([]);
     setSavedImages([]);
     setShowForm(false);
@@ -873,14 +1504,129 @@ export default function GerenciaPage() {
     loadRelationOptions();
   }, [baseUrl, token, userRole, oficinaId]);
 
+  useEffect(() => {
+    if (!token || !oficinaId) {
+      setLoggedOficinaName("");
+      return;
+    }
+
+    let mounted = true;
+    const loadLoggedOficinaName = async () => {
+      const result = await fetchJson(baseUrl, `/api/v1/oficinas/${oficinaId}`, {
+        method: "GET",
+        headers: authHeaders,
+      });
+      if (!mounted || !result.ok || !isPlainObject(result.data)) return;
+      const data = isPlainObject(result.data.data)
+        ? result.data.data
+        : isPlainObject(result.data.Data)
+          ? result.data.Data
+          : result.data;
+      const name = getRecordValue(data, "Nome");
+      if (typeof name === "string" && name.trim()) {
+        setLoggedOficinaName(name.trim());
+      }
+    };
+
+    void loadLoggedOficinaName();
+    return () => {
+      mounted = false;
+    };
+  }, [authHeaders, baseUrl, oficinaId, token]);
+
   const openCreateForm = () => {
     if (!selectedConfig || !canCreateSelected) return;
     setFormMode("create");
     setEditingId(null);
-    setFormData(applyLoggedOficina(cloneTemplate(selectedConfig.template)));
+    setVehicleStatus(0);
+    setPedidoStatus(0);
+    setDiscountEnabled(false);
+    setDiscountType("percent");
+    setDiscountValue(0);
+    setFormData(
+      applyLoggedOficina(createEmptyListForm(getCreateTemplate(selectedConfig)))
+    );
     setImageFiles([]);
     setSavedImages([]);
+    void loadRelationOptions();
     setShowForm(true);
+  };
+
+  const openStockAdjustment = async (item: FormValue) => {
+    const id = getItemId(item);
+    if (!id) return;
+    setError(null);
+    setStockAdjustmentAmount(1);
+    let fullItem = item;
+    const pieceConfig = entityConfigs.find((config) => config.key === "pecas");
+    if (pieceConfig?.getByIdPath) {
+      const result = await fetchJson(baseUrl, pieceConfig.getByIdPath(String(id)), {
+        method: "GET",
+        headers: authHeaders,
+      });
+      if (result.ok) {
+        const candidate = isPlainObject(result.data)
+          ? (result.data.Data ?? result.data.data ?? result.data)
+          : extractList(result.data)[0];
+        if (isPlainObject(candidate)) fullItem = candidate;
+      }
+    }
+    setStockAdjustmentItem(fullItem);
+  };
+
+  const handleStockAdjustment = async (direction: "add" | "subtract") => {
+    if (!stockAdjustmentItem) return;
+    const id = getItemId(stockAdjustmentItem);
+    const amount = Math.floor(Number(stockAdjustmentAmount));
+    if (!id || !Number.isFinite(amount) || amount <= 0) {
+      setError("Informe uma quantidade inteira maior que zero.");
+      return;
+    }
+
+    const unit = Math.max(1, Math.floor(Number(getRecordValue(stockAdjustmentItem, "Unidade")) || 1));
+    const rawStock = Number(
+      getRecordValue(stockAdjustmentItem, "quantidadeEstoque") ??
+        getRecordValue(stockAdjustmentItem, "Quantidade_Estoque")
+    );
+    const currentStock = Number.isFinite(rawStock)
+      ? Math.max(0, rawStock)
+      : Math.max(0, Number(getRecordValue(stockAdjustmentItem, "Quantidade")) || 0) * unit;
+    const stockDelta = amount * unit;
+
+    if (direction === "subtract" && stockDelta > currentStock) {
+      setError(`Não é possível diminuir ${amount}. Quantidade disponível: ${Math.floor(currentStock / unit)}.`);
+      return;
+    }
+
+    const nextStock = direction === "add" ? currentStock + stockDelta : currentStock - stockDelta;
+    const nextQuantity = Math.floor(nextStock / unit);
+    const basePayload = buildPayload(
+      entityConfigs.find((config) => config.key === "pecas")?.template ?? {},
+      { ...stockAdjustmentItem, Quantidade: nextQuantity, quantidadeEstoque: nextStock },
+      "",
+      { includeArrays: true, entityKey: "pecas", formMode: "edit" }
+    );
+    const payload = isPlainObject(basePayload)
+      ? { ...basePayload, Quantidade: nextQuantity, quantidadeEstoque: nextStock }
+      : basePayload;
+
+    setStockAdjustmentSaving(true);
+    setError(null);
+    const result = await fetchJson(baseUrl, `/api/v1/pecas/${id}`, {
+      method: "PUT",
+      headers: authHeaders,
+      body: payload,
+    });
+    setStockAdjustmentSaving(false);
+
+    if (!result.ok) {
+      setError(getApiErrorMessage(result.data, `Falha ao atualizar o estoque (erro ${result.status}).`));
+      return;
+    }
+
+    setStockAdjustmentItem(null);
+    if (selectedConfig) await loadList(selectedConfig);
+    await loadRelationOptions();
   };
 
   const handleEdit = async (item: FormValue, nextMode: FormMode = "edit") => {
@@ -916,8 +1662,26 @@ export default function GerenciaPage() {
 
     setFormMode(nextMode);
     setEditingId(id);
+    if (selectedConfig.key === "veiculos") {
+      setVehicleStatus(normalizeVehicleStatus(getRecordValue(itemToEdit, "Status")));
+    }
+    if (selectedConfig.key === "pedidos") {
+      setPedidoStatus(normalizeWorkflowStatus(getRecordValue(itemToEdit, "Status")));
+      setOriginalPedidoPieceQuantities(getPedidoPieceQuantities(itemToEdit));
+    }
+    if (selectedConfig.key === "pedidos") {
+      const percentage = Number(getRecordValue(itemToEdit, "DescontoPorcentagem")) || 0;
+      const money = Number(getRecordValue(itemToEdit, "DescontoReais")) || 0;
+      setDiscountEnabled(percentage > 0 || money > 0);
+      setDiscountType(percentage > 0 ? "percent" : "money");
+      setDiscountValue(percentage > 0 ? percentage : money);
+    }
+    if (selectedConfig.key === "pecas") {
+      itemToEdit = normalizePieceFormRecord(itemToEdit);
+    }
     setImageFiles([]);
     setSavedImages(getImageList(selectedConfig.key, itemToEdit));
+    void loadRelationOptions();
     setFormData(
       applyLoggedOficina(mergeWithTemplate(selectedConfig.template, itemToEdit) as FormValue)
     );
@@ -954,26 +1718,127 @@ export default function GerenciaPage() {
     return true;
   };
 
-  const handleCreate = async () => {
-    if (!selectedConfig || !canCreateSelected) return;
+  const removeSavedVehicleImage = async (imageId: string) => {
+    if (
+      selectedConfig?.key !== "veiculos" ||
+      formMode === "view" ||
+      !editingId
+    ) {
+      return;
+    }
+
+    const numericImageId = Number(imageId);
+    if (!Number.isFinite(numericImageId) || numericImageId <= 0) {
+      setError("Não foi possível identificar a imagem selecionada.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
-    const result = await fetchJson(baseUrl, selectedConfig.createPath, {
+    const result = await fetchJson(
+      baseUrl,
+      `/api/v1/veiculos/${editingId}/imagens/${numericImageId}`,
+      { method: "DELETE", headers: authHeaders }
+    );
+
+    if (!result.ok) {
+      setError(
+        `Falha ao remover imagem: ${getApiErrorMessage(
+          result.data,
+          result.status === 403
+            ? "a API não permite que este usuário remova imagens do veículo"
+            : `erro ${result.status}`
+        )}`
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    setSavedImages((current) =>
+      current.filter(
+        (image) =>
+          String(getRecordValue(image, "Id") ?? getRecordValue(image, "id")) !==
+          imageId
+      )
+    );
+    setSavedImagePreviews((current) =>
+      current.filter((image) => image.id !== imageId)
+    );
+    setIsLoading(false);
+  };
+
+  const handleCreate = async () => {
+    if (!selectedConfig || !canCreateSelected) return;
+    if (selectedConfig.key === "veiculos") {
+      const validationError = getVehicleValidationError(formData);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
+    if (selectedConfig.key === "pedidos") {
+      const stockError = validatePedidoStock({});
+      if (stockError) {
+        setError(stockError);
+        return;
+      }
+    }
+    setIsLoading(true);
+    setError(null);
+    const createTemplate = getCreateTemplate(selectedConfig);
+    const rawCreatePayload = buildPayload(createTemplate, formData, "", {
+      includeArrays: shouldCreateWithArrays(selectedConfig.key),
+      entityKey: selectedConfig.key,
+      formMode: "create",
+    });
+    let createPayload: unknown =
+      selectedConfig.key === "clientes" && isPlainObject(rawCreatePayload)
+        ? {
+            ...rawCreatePayload,
+            telefones: Array.isArray(rawCreatePayload.telefones)
+              ? rawCreatePayload.telefones.filter(
+                  (telefone) =>
+                    isPlainObject(telefone) &&
+                    onlyDigits(getRecordValue(telefone, "numero")).length >= 8
+                )
+              : [],
+          }
+        : rawCreatePayload;
+    createPayload = applyPedidoTotals(createPayload);
+    if (selectedConfig.key === "pecas") {
+      createPayload = applyPieceStockTotal(createPayload);
+    }
+    let createPath = selectedConfig.createPath;
+
+    if (selectedConfig.key === "veiculos") {
+      const clienteId = Number(getRecordValue(formData, "ClienteId"));
+      if (!Number.isFinite(clienteId) || clienteId <= 0) {
+        setError("Selecione o cliente do veículo.");
+        setIsLoading(false);
+        return;
+      }
+
+      createPath = `/api/v1/clientes/${clienteId}/veiculos`;
+      if (isPlainObject(rawCreatePayload)) {
+        createPayload = Object.fromEntries(
+          Object.entries(rawCreatePayload).filter(
+            ([key]) =>
+              !["clienteid", "idcliente", "status"].includes(
+                normalizeFieldKey(key)
+              )
+          )
+        );
+      }
+    }
+
+    const result = await fetchJson(baseUrl, createPath, {
       method: "POST",
       headers: authHeaders,
-      body: buildPayload(selectedConfig.template, formData, "", {
-        includeArrays: shouldCreateWithArrays(selectedConfig.key),
-        entityKey: selectedConfig.key,
-        formMode: "create",
-      }),
+      body: createPayload,
     });
 
     if (!result.ok) {
-      const message =
-        isPlainObject(result.data) && typeof result.data.Message === "string"
-          ? result.data.Message
-          : "Falha ao criar registro";
-      setError(message);
+      setError(getApiErrorMessage(result.data, "Falha ao criar registro"));
       setIsLoading(false);
       return;
     }
@@ -981,8 +1846,9 @@ export default function GerenciaPage() {
     let createdId = getNestedRecordId(result.data);
 
     if (
+      selectedConfig.key !== "clientes" &&
       selectedConfig.updatePath &&
-      hasArrayItems(selectedConfig.template, formData)
+      hasArrayItems(createTemplate, formData)
     ) {
       createdId = createdId ?? (await resolveCreatedId(result.data));
       if (createdId) {
@@ -992,12 +1858,14 @@ export default function GerenciaPage() {
           {
             method: "PUT",
             headers: authHeaders,
-            body: buildPayload(selectedConfig.template, formData, "", {
-              includeArrays: true,
-              parentId: createdId,
-              entityKey: selectedConfig.key,
-              formMode: "create",
-            }),
+            body: applyPedidoTotals(
+              buildPayload(selectedConfig.template, formData, "", {
+                includeArrays: true,
+                parentId: createdId,
+                entityKey: selectedConfig.key,
+                formMode: "create",
+              })
+            ),
           }
         );
 
@@ -1014,10 +1882,18 @@ export default function GerenciaPage() {
       }
     }
 
+    if (selectedConfig.key === "pedidos") {
+      const stockUpdated = await updateStockFromPedido({});
+      if (!stockUpdated) {
+        setIsLoading(false);
+        return;
+      }
+    }
+
     if (imageFiles.length > 0) {
       const imageTargetId = createdId ?? (await resolveCreatedId(result.data));
       if (!imageTargetId) {
-        setError("Registro criado, mas nao foi possivel identificar o ID para enviar imagem.");
+        setError("Registro criado, mas não foi possível identificar o ID para enviar imagem.");
         setIsLoading(false);
         return;
       }
@@ -1038,20 +1914,105 @@ export default function GerenciaPage() {
     ) {
       return;
     }
+    if (selectedConfig.key === "veiculos") {
+      const validationError = getVehicleValidationError(formData);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
+    if (selectedConfig.key === "pedidos") {
+      const stockError = validatePedidoStock(originalPedidoPieceQuantities);
+      if (stockError) {
+        setError(stockError);
+        return;
+      }
+    }
     setIsLoading(true);
     setError(null);
+    const updatedPedidoStatus = normalizeWorkflowStatus(pedidoStatus);
+    if (selectedConfig.key === "pedidos") {
+      const statusResult = await fetchJson(
+        baseUrl,
+        `/api/v1/pedidos/${editingId}/status`,
+        {
+          method: "PATCH",
+          headers: authHeaders,
+          body: { status: updatedPedidoStatus },
+        }
+      );
+
+      if (!statusResult.ok) {
+        setError(
+          `Falha no PATCH do status do pedido: ${getApiErrorMessage(
+            statusResult.data,
+            `erro ${statusResult.status}`
+          )}`
+        );
+        setIsLoading(false);
+        return;
+      }
+    }
+    const updatePath =
+      selectedConfig.key === "clientes" && normalizeRole(userRole) === "oficina"
+        ? `/api/v1/oficinas/me/clientes/${editingId}`
+        : selectedConfig.key === "veiculos"
+          ? `/api/v1/oficinas/me/veiculos/${editingId}`
+          : selectedConfig.updatePath(String(editingId));
+    const isOfficeClientUpdate =
+      selectedConfig.key === "clientes" && normalizeRole(userRole) === "oficina";
+    const phoneFieldKey = Object.keys(formData).find(
+      (key) => normalizeFieldKey(key) === "telefones"
+    );
+    const updateFormData =
+      isOfficeClientUpdate && phoneFieldKey
+        ? {
+            ...formData,
+            [phoneFieldKey]: Array.isArray(formData[phoneFieldKey])
+              ? formData[phoneFieldKey].filter(
+                  (phone) => isPlainObject(phone) && !getItemId(phone)
+                )
+              : [],
+          }
+        : formData;
+    const rawUpdatePayload = buildPayload(
+      selectedConfig.template,
+      updateFormData,
+      "",
+      {
+        includeArrays: true,
+        parentId: editingId,
+        entityKey: selectedConfig.key,
+        formMode: "edit",
+      }
+    );
+    let updatePayload =
+      (selectedConfig.key === "veiculos" || selectedConfig.key === "pedidos") &&
+      isPlainObject(rawUpdatePayload)
+        ? {
+            ...Object.fromEntries(
+              Object.entries(rawUpdatePayload).filter(
+                ([key]) =>
+                  selectedConfig.key === "veiculos"
+                    ? !["clienteid", "idcliente", "status"].includes(
+                        normalizeFieldKey(key)
+                      )
+                    : normalizeFieldKey(key) !== "status"
+              )
+            ),
+          }
+        : rawUpdatePayload;
+    updatePayload = applyPedidoTotals(updatePayload);
+    if (selectedConfig.key === "pecas") {
+      updatePayload = applyPieceStockTotal(updatePayload);
+    }
     const result = await fetchJson(
       baseUrl,
-      selectedConfig.updatePath(String(editingId)),
+      updatePath,
       {
         method: "PUT",
         headers: authHeaders,
-        body: buildPayload(selectedConfig.template, formData, "", {
-          includeArrays: true,
-          parentId: editingId,
-          entityKey: selectedConfig.key,
-          formMode: "edit",
-        }),
+        body: updatePayload,
       }
     );
 
@@ -1063,6 +2024,93 @@ export default function GerenciaPage() {
       setError(message);
       setIsLoading(false);
       return;
+    }
+
+    if (selectedConfig.key === "pedidos") {
+      const stockUpdated = await updateStockFromPedido(
+        originalPedidoPieceQuantities
+      );
+      if (!stockUpdated) {
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    if (selectedConfig.key === "pedidos") {
+      const vehicleId = Number(
+        getRecordValue(formData, "idVeiculo") ??
+          getRecordValue(formData, "VeiculoId")
+      );
+      if (Number.isFinite(vehicleId) && vehicleId > 0) {
+        const ordersCheck = await fetchJson(
+          baseUrl,
+          "/api/v1/pedidos?page=1&pageSize=100",
+          { method: "GET", headers: authHeaders }
+        );
+        if (!ordersCheck.ok) {
+          setError(
+            `Status do pedido atualizado, mas não foi possível verificar os pedidos do veículo: ${getApiErrorMessage(
+              ordersCheck.data,
+              `erro ${ordersCheck.status}`
+            )}`
+          );
+          setIsLoading(false);
+          return;
+        }
+        const currentOrders = await fetchAllDashboardRecords(
+          baseUrl,
+          "/api/v1/pedidos",
+          authHeaders
+        );
+        const relatedOrders = currentOrders.filter(
+          (order) =>
+            Number(
+              getRecordValue(order, "idVeiculo") ??
+                getRecordValue(order, "VeiculoId")
+            ) === vehicleId
+        );
+        const hasEditedOrder = relatedOrders.some(
+          (order) => getItemId(order) === editingId
+        );
+        if (!hasEditedOrder) {
+          relatedOrders.push({
+            Id: editingId,
+            idVeiculo: vehicleId,
+            Status: updatedPedidoStatus,
+          });
+        }
+        const synchronizedStatuses = relatedOrders.map((order) =>
+          getItemId(order) === editingId
+            ? updatedPedidoStatus
+            : normalizeWorkflowStatus(getRecordValue(order, "Status"))
+        );
+        const allOrdersCompleted =
+          synchronizedStatuses.length > 0 &&
+          synchronizedStatuses.every((status) => status === 3);
+
+        if (allOrdersCompleted) {
+          const vehicleStatusResult = await fetchJson(
+            baseUrl,
+            `/api/v1/veiculos/${vehicleId}/status`,
+            {
+              method: "PATCH",
+              headers: authHeaders,
+              body: { status: 3 },
+            }
+          );
+
+          if (!vehicleStatusResult.ok) {
+            setError(
+              `Todos os pedidos foram concluídos, mas o PATCH do veículo falhou: ${getApiErrorMessage(
+                vehicleStatusResult.data,
+                `erro ${vehicleStatusResult.status}`
+              )}`
+            );
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
     }
 
     const uploaded = await uploadImagesForEntity(selectedConfig.key, editingId);
@@ -1079,9 +2127,13 @@ export default function GerenciaPage() {
 
     setIsLoading(true);
     setError(null);
+    const deletePath =
+      selectedConfig.key === "clientes" && normalizeRole(userRole) === "oficina"
+        ? `/api/v1/oficinas/me/clientes/${id}/vinculo`
+        : selectedConfig.deletePath(String(id));
     const result = await fetchJson(
       baseUrl,
-      selectedConfig.deletePath(String(id)),
+      deletePath,
       {
         method: "DELETE",
         headers: authHeaders,
@@ -1120,11 +2172,11 @@ export default function GerenciaPage() {
       });
 
       if (!result.ok) {
-        const message =
-          isPlainObject(result.data) && typeof result.data.Message === "string"
-            ? result.data.Message
-            : result.status === 403
-              ? "A API recusou excluir este telefone para o usuario atual."
+              const message =
+            isPlainObject(result.data) && typeof result.data.Message === "string"
+              ? result.data.Message
+              : result.status === 403
+              ? "A API recusou excluir este telefone para o usuário atual."
               : "Falha ao remover telefone.";
         setError(message);
         setIsLoading(false);
@@ -1154,7 +2206,11 @@ export default function GerenciaPage() {
       const number = digits.slice(2);
       setFormData((prev) => {
         let next = setAtPath(prev, path, number);
-        next = setAtPath(next, [...parentPath, "DDD"], ddd);
+        const parent = getAtPath(prev, parentPath);
+        const dddKey = isPlainObject(parent)
+          ? getRecordKey(parent, "DDD")
+          : "DDD";
+        next = setAtPath(next, [...parentPath, dddKey], ddd);
         return next as FormValue;
       });
       return;
@@ -1165,12 +2221,33 @@ export default function GerenciaPage() {
       normalized.includes("cpf") ||
       normalized.includes("cnpj")
     ) {
-      nextValue = maskFieldValue(key, value);
+      nextValue =
+        selectedConfig.key === "clientes" && normalized.includes("cpfcnpj")
+          ? formatCpf(value)
+          : maskFieldValue(key, value);
+    } else if (["placaveiculo", "chassiveiculo", "seguro"].includes(normalized)) {
+      nextValue = normalizeSpecialTextField(key, value);
     } else if (typeof templateValue === "number") {
       const parsed = Number(value);
       nextValue = Number.isNaN(parsed) ? templateValue : parsed;
     } else {
       nextValue = maskFieldValue(key, value);
+    }
+
+    if (
+      selectedConfig.key === "veiculos" &&
+      path.length === 1 &&
+      normalized === "status"
+    ) {
+      setVehicleStatus(normalizeVehicleStatus(nextValue));
+    }
+
+    if (
+      selectedConfig.key === "pedidos" &&
+      path.length === 1 &&
+      normalized === "status"
+    ) {
+      setPedidoStatus(normalizeWorkflowStatus(nextValue));
     }
 
     setFormData((prev) => setAtPath(prev, path, nextValue) as FormValue);
@@ -1187,7 +2264,11 @@ export default function GerenciaPage() {
             let next: unknown = prev;
             const applySibling = (field: string, fieldValue?: string) => {
               if (!fieldValue) return;
-              next = setAtPath(next, [...parentPath, field], fieldValue);
+              const parent = getAtPath(next, parentPath);
+              const siblingKey = isPlainObject(parent)
+                ? getRecordKey(parent, field)
+                : field;
+              next = setAtPath(next, [...parentPath, siblingKey], fieldValue);
             };
 
             applySibling("Rua", address.rua);
@@ -1204,21 +2285,42 @@ export default function GerenciaPage() {
     }
   };
 
+  const selectImageFiles = (files: File[]) => {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    const rejectedCount = files.length - images.length;
+
+    setImageFiles(images);
+    if (rejectedCount > 0) {
+      setError(
+        rejectedCount === 1
+          ? "Um arquivo foi ignorado porque não é uma imagem."
+          : `${rejectedCount} arquivos foram ignorados porque não são imagens.`
+      );
+    } else {
+      setError(null);
+    }
+  };
+
   const renderImageField = () => {
     if (!selectedConfig || !imageUploadPathByEntity[selectedConfig.key]) return null;
 
     return (
-      <div className="mt-4 rounded-lg border border-[var(--sigo-border)] bg-white p-4">
-        <div className="mb-4 border-b border-[var(--sigo-border)] pb-4">
+      <div className="mt-4 overflow-hidden rounded-lg border border-[var(--sigo-border)] bg-white shadow-[var(--sigo-shadow-sm)]">
+        <div className="border-b border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] px-4 py-3">
           <p className="text-sm font-black text-[var(--sigo-text)]">Imagens</p>
+          <p className="mt-1 text-xs font-medium text-[var(--sigo-muted)]">
+            Adicione e organize as imagens vinculadas.
+          </p>
         </div>
+
+        <div className="grid gap-3 p-4">
 
         {savedImagePreviews.length > 0 ? (
           <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {savedImagePreviews.map((image) => (
               <figure
                 key={image.id}
-                className="overflow-hidden rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)]"
+                className="relative overflow-hidden rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)]"
               >
                 <img
                   src={image.url}
@@ -1228,6 +2330,17 @@ export default function GerenciaPage() {
                 <figcaption className="truncate px-3 py-2 text-xs font-semibold text-[var(--sigo-muted)]">
                   {image.label}
                 </figcaption>
+                {formMode !== "view" ? (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-sm bg-white/95 text-xl font-black leading-none text-red-600 shadow-md transition-colors hover:bg-red-50 hover:text-red-700"
+                    aria-label={`Remover ${image.label}`}
+                    title="Remover imagem salva"
+                    onClick={() => void removeSavedVehicleImage(image.id)}
+                  >
+                    ×
+                  </button>
+                ) : null}
               </figure>
             ))}
           </div>
@@ -1238,24 +2351,68 @@ export default function GerenciaPage() {
         ) : null}
 
         {formMode !== "view" ? (
-          <label className="sigo-label">
-            <span>Adicionar imagem</span>
+          <div className="grid gap-3">
+          <label
+            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--sigo-border-strong)] bg-[var(--sigo-surface-soft)] px-4 py-6 text-center transition-colors hover:border-[var(--sigo-blue)] hover:bg-[var(--sigo-blue-soft)]"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              selectImageFiles(Array.from(event.dataTransfer.files));
+            }}
+          >
+            <img src="/mais.png" alt="" aria-hidden="true" className="h-9 w-9 object-contain" />
+            <span className="text-sm font-black text-[var(--sigo-blue-deep)]">
+              Adicionar imagens
+            </span>
+            <span className="text-xs font-semibold text-[var(--sigo-muted)]">
+              Clique ou arraste somente imagens para esta área
+            </span>
             <input
-              className="sigo-input"
+              className="sr-only"
               type="file"
               accept="image/*"
               multiple
-              onChange={(event) =>
-                setImageFiles(Array.from(event.target.files ?? []))
-              }
+              onChange={(event) => {
+                selectImageFiles(Array.from(event.target.files ?? []));
+                event.target.value = "";
+              }}
             />
             {imageFiles.length > 0 ? (
               <span className="text-xs font-semibold text-[var(--sigo-muted)]">
-                {imageFiles.length} arquivo(s) selecionado(s).
+                {imageFiles.length} imagem(ns) selecionada(s).
               </span>
             ) : null}
           </label>
+          {imageFiles.length > 0 ? (
+            <div className="grid gap-2">
+              {imageFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.lastModified}-${index}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] px-3 py-2"
+                >
+                  <span className="min-w-0 truncate text-xs font-semibold text-[var(--sigo-text)]">
+                    {file.name}
+                  </span>
+                  <button
+                    type="button"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-transparent text-xl font-black leading-none text-red-600 hover:bg-red-50 hover:text-red-700"
+                    aria-label={`Remover ${file.name}`}
+                    title="Remover imagem"
+                    onClick={() =>
+                      setImageFiles((current) =>
+                        current.filter((_, fileIndex) => fileIndex !== index)
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          </div>
         ) : null}
+        </div>
       </div>
     );
   };
@@ -1264,11 +2421,21 @@ export default function GerenciaPage() {
     template: Record<string, unknown>,
     value: Record<string, unknown>,
     path: Array<string | number> = []
-  ) =>
-    Object.keys(template).map((key) => {
+  ) => {
+    const fieldOrder = (key: string) => {
+      if (Array.isArray(template[key])) return 2;
+      if (isObservationField(key)) return 1;
+      return 0;
+    };
+    const orderedKeys = Object.keys(template).sort(
+      (first, second) => fieldOrder(first) - fieldOrder(second)
+    );
+
+    return orderedKeys.map((key) => {
       const templateValue = template[key];
       const currentValue = value[key];
       const fieldPath = [...path, key];
+      const normalizedFieldKey = normalizeFieldKey(key);
       const autoParentField = getAutoParentField(path);
       const parentListKey = getParentListKey(path);
       const hiddenFields = parentListKey
@@ -1278,13 +2445,121 @@ export default function GerenciaPage() {
       if (
         isOwnIdField(key, path) ||
         (path.length === 0 &&
-          formMode !== "create" &&
+          normalizeFieldKey(key) === "status" &&
+          (selectedConfig.key === "veiculos" ||
+            (selectedConfig.key === "pedidos" && formMode === "create"))) ||
+        (path.length === 0 &&
           shouldHideFieldForEntity(selectedConfig.key, key)) ||
         hiddenFields.some((field) => normalizeFieldKey(field) === normalizeFieldKey(key)) ||
         (autoParentField &&
           normalizeFieldKey(key) === normalizeFieldKey(autoParentField))
       ) {
         return null;
+      }
+
+      if (
+        selectedConfig.key === "pedidos" &&
+        path.length === 0 &&
+        [
+          "descontoreais",
+          "descontoporcentagem",
+          "descontototalreais",
+          "descontoservicoporcentagem",
+          "descontoservicoreais",
+          "descontopecaporcentagem",
+          "descontopecareais",
+        ].includes(normalizedFieldKey)
+      ) {
+        return null;
+      }
+
+      if (
+        selectedConfig.key === "pedidos" &&
+        path.length === 0 &&
+        normalizedFieldKey === "valortotal"
+      ) {
+        return (
+          <div
+            key={fieldPath.join(".")}
+            className="grid gap-4 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4 md:col-span-2"
+          >
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border border-[var(--sigo-border)] bg-white p-3">
+                <p className="text-xs font-bold text-[var(--sigo-muted)]">Peças</p>
+                <p className="mt-1 text-base font-black text-[var(--sigo-text)]">
+                  {currencyFormatter.format(pedidoTotals.pieces)}
+                </p>
+              </div>
+              <div className="rounded-md border border-[var(--sigo-border)] bg-white p-3">
+                <p className="text-xs font-bold text-[var(--sigo-muted)]">Serviços</p>
+                <p className="mt-1 text-base font-black text-[var(--sigo-text)]">
+                  {currencyFormatter.format(pedidoTotals.services)}
+                </p>
+              </div>
+              <div className="rounded-md border border-[var(--sigo-border)] bg-white p-3">
+                <p className="text-xs font-bold text-[var(--sigo-muted)]">Valor total</p>
+                <p className="mt-1 text-base font-black text-[var(--sigo-blue)]">
+                  {currencyFormatter.format(pedidoTotals.total)}
+                </p>
+              </div>
+            </div>
+
+            {formMode !== "view" ? (
+              <div>
+                <button
+                  type="button"
+                  className="text-sm font-extrabold text-[var(--sigo-blue)]"
+                  onClick={() => {
+                    setDiscountEnabled((current) => !current);
+                    if (discountEnabled) setDiscountValue(0);
+                  }}
+                >
+                  {discountEnabled ? "Remover desconto" : "+ Adicionar desconto"}
+                </button>
+
+                {discountEnabled ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr]">
+                    <label className="sigo-label">
+                      <span>Tipo de desconto</span>
+                      <select
+                        className="sigo-input bg-white"
+                        value={discountType}
+                        onChange={(event) => {
+                          setDiscountType(event.target.value as DiscountType);
+                          setDiscountValue(0);
+                        }}
+                      >
+                        <option value="percent">Porcentagem (%)</option>
+                        <option value="money">Valor em reais (R$)</option>
+                      </select>
+                    </label>
+                    <label className="sigo-label">
+                      <span>{discountType === "percent" ? "Desconto (%)" : "Desconto (R$)"}</span>
+                      <input
+                        className="sigo-input bg-white"
+                        type="number"
+                        min="0"
+                        max={discountType === "percent" ? 100 : pedidoTotals.gross}
+                        step={discountType === "percent" ? 1 : 0.01}
+                        value={discountValue}
+                        onChange={(event) =>
+                          setDiscountValue(Math.max(0, Number(event.target.value) || 0))
+                        }
+                      />
+                    </label>
+                    <p className="text-xs font-bold text-[var(--sigo-muted)] sm:col-span-2">
+                      Desconto aplicado: {currencyFormatter.format(pedidoTotals.discount)}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : pedidoTotals.discount > 0 ? (
+              <p className="text-sm font-bold text-[var(--sigo-muted)]">
+                Desconto aplicado: {currencyFormatter.format(pedidoTotals.discount)}
+              </p>
+            ) : null}
+          </div>
+        );
       }
 
       if (Array.isArray(templateValue)) {
@@ -1316,6 +2591,12 @@ export default function GerenciaPage() {
                     );
                   }}
                 >
+                  <img
+                    src="/mais.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-4 w-4 object-contain"
+                  />
                   Adicionar
                 </button>
               ) : null}
@@ -1326,38 +2607,60 @@ export default function GerenciaPage() {
                   Sem itens adicionados.
                 </p>
               ) : null}
-              {items.map((item, index) => (
-                <div
-                  key={`${key}-${index}`}
-                  className="rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4"
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-xs font-bold text-[var(--sigo-muted)]">
-                      Item
-                    </p>
-                    {formMode !== "view" ? (
-                      <button
-                        type="button"
-                        className="text-xs font-bold text-[var(--sigo-danger)]"
-                        onClick={() =>
-                          handleRemoveListItem(key, fieldPath, items, item, index)
-                        }
-                      >
-                        Remover
-                      </button>
+              {items.map((item, index) => {
+                const isExistingOfficeClientPhone =
+                  normalizeFieldKey(key) === "telefones" &&
+                  formMode === "edit" &&
+                  normalizeRole(userRole) === "oficina" &&
+                  isPlainObject(item) &&
+                  Boolean(getItemId(item));
+
+                return (
+                  <div
+                    key={`${key}-${index}`}
+                    className="rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4"
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        {normalizeFieldKey(key) !== "telefones" ? (
+                          <p className="text-xs font-bold text-[var(--sigo-muted)]">
+                            Item
+                          </p>
+                        ) : null}
+                        {isExistingOfficeClientPhone ? (
+                          <p className="mt-1 text-xs font-semibold text-[var(--sigo-soft)]">
+                            Telefone já cadastrado — somente leitura
+                          </p>
+                        ) : null}
+                      </div>
+                      {formMode !== "view" && !isExistingOfficeClientPhone ? (
+                        <button
+                          type="button"
+                          className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-xl font-black leading-none text-red-600 hover:bg-red-50 hover:text-red-700"
+                          aria-label="Remover item"
+                          title="Remover item"
+                          onClick={() =>
+                            handleRemoveListItem(key, fieldPath, items, item, index)
+                          }
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                    {itemTemplate && isPlainObject(item) ? (
+                      <fieldset disabled={isExistingOfficeClientPhone}>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {renderFields(
+                            itemTemplate,
+                            item as Record<string, unknown>,
+                            [...fieldPath, index]
+                          )}
+                        </div>
+                      </fieldset>
                     ) : null}
                   </div>
-                  {itemTemplate && isPlainObject(item) ? (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {renderFields(
-                        itemTemplate,
-                        item as Record<string, unknown>,
-                        [...fieldPath, index]
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
@@ -1375,7 +2678,15 @@ export default function GerenciaPage() {
       }
 
       const normalizedValue =
-        currentValue === undefined || currentValue === null
+        selectedConfig.key === "veiculos" &&
+        fieldPath.length === 1 &&
+        normalizeFieldKey(key) === "status"
+          ? vehicleStatus
+          : selectedConfig.key === "pedidos" &&
+              fieldPath.length === 1 &&
+              normalizeFieldKey(key) === "status"
+            ? pedidoStatus
+          : currentValue === undefined || currentValue === null
           ? templateValue ?? ""
           : currentValue;
       const displayValue =
@@ -1393,17 +2704,77 @@ export default function GerenciaPage() {
           : normalizeFieldKey(key) === "cep" ||
         normalizeFieldKey(key).includes("cpf") ||
         normalizeFieldKey(key).includes("cnpj")
-          ? maskFieldValue(key, normalizedValue)
+          ? selectedConfig.key === "clientes" &&
+            normalizeFieldKey(key).includes("cpfcnpj")
+            ? formatCpf(normalizedValue)
+            : maskFieldValue(key, normalizedValue)
           : String(normalizedValue);
-      const fieldOptions = getFieldOptions(key, path);
+      const fieldOptions = getFieldOptions(key, path, selectedConfig.key);
+      const editableFieldOptions = getEditableFieldOptions(selectedConfig.key, key);
+      const editableOptionsId = editableFieldOptions
+        ? `options-${selectedConfig.key}-${fieldPath.join("-")}`
+        : undefined;
+      const matchedFieldOption = fieldOptions?.find(
+        (option) =>
+          String(option.value) === String(normalizedValue) ||
+          normalizeFieldKey(String(option.value)) ===
+            normalizeFieldKey(String(normalizedValue)) ||
+          normalizeFieldKey(option.label) ===
+            normalizeFieldKey(String(normalizedValue))
+      );
+      const selectValue = matchedFieldOption?.value ?? normalizedValue;
+      const hasUnmappedOption =
+        Boolean(fieldOptions) &&
+        !matchedFieldOption &&
+        String(normalizedValue ?? "").trim().length > 0;
       const relationEntityKey = getRelationEntityKey(key);
       const isLoggedOficinaField =
         selectedCapability?.scopeToOwnOffice &&
         Boolean(oficinaId) &&
         ["idoficina", "oficinaid"].includes(normalizeFieldKey(key));
       const loggedOficinaLabel =
+        loggedOficinaName ||
         findRelationLabel(relationOptions, "idOficina", oficinaId) ||
         (oficinaId ? `Oficina #${oficinaId}` : "");
+
+      if (normalizeFieldKey(key) === "pais") {
+        return (
+          <label
+            key={fieldPath.join(".")}
+            className="sigo-label rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3"
+          >
+            <span>{formatFieldLabel(key)}</span>
+            <input className="sigo-input" type="text" value="Brasil" disabled />
+          </label>
+        );
+      }
+
+      if (isObservationField(key)) {
+        return (
+          <label
+            key={fieldPath.join(".")}
+            className="sigo-label rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4 md:col-span-2"
+          >
+            <span>{formatFieldLabel(key)}</span>
+            <div className="relative">
+              <textarea
+                className="sigo-input sigo-observation-input resize-y bg-white"
+                value={displayValue}
+                disabled={formMode === "view"}
+                aria-label={formatFieldLabel(key)}
+                onChange={(event) =>
+                  handleFieldChange(fieldPath, templateValue, event.target.value)
+                }
+              />
+              {!displayValue ? (
+                <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 text-center text-xs font-semibold text-[var(--sigo-soft)]">
+                  Digite as observações do registro
+                </span>
+              ) : null}
+            </div>
+          </label>
+        );
+      }
 
       if (isLoggedOficinaField) {
         return (
@@ -1423,12 +2794,31 @@ export default function GerenciaPage() {
       }
 
       if (relationEntityKey) {
+        const availableRelationOptions =
+          selectedConfig.key === "pedidos" && relationEntityKey === "pecas"
+            ? (relationOptions[relationEntityKey] ?? []).filter((option) => {
+                if (String(option.value) === String(normalizedValue)) return true;
+                if (!option.item) return false;
+                const rawStock = Number(
+                  getRecordValue(option.item, "quantidadeEstoque") ??
+                    getRecordValue(option.item, "Quantidade_Estoque")
+                );
+                const unit = Math.max(
+                  1,
+                  Number(getRecordValue(option.item, "Unidade")) || 1
+                );
+                const stock = Number.isFinite(rawStock)
+                  ? rawStock
+                  : (Number(getRecordValue(option.item, "Quantidade")) || 0) * unit;
+                return stock > 0;
+              })
+            : relationOptions[relationEntityKey] ?? [];
         return (
-          <RelationComboField
+          <RelationSearchField
             key={fieldPath.join(".")}
             label={formatFieldLabel(key)}
             value={normalizedValue}
-            options={relationOptions[relationEntityKey] ?? []}
+            options={availableRelationOptions}
             disabled={formMode === "view"}
             onChange={(nextValue) =>
               handleFieldChange(fieldPath, templateValue, nextValue)
@@ -1443,13 +2833,18 @@ export default function GerenciaPage() {
           {fieldOptions ? (
             <select
               className="sigo-input"
-              value={String(normalizedValue)}
+              value={String(selectValue)}
               disabled={formMode === "view"}
               onChange={(event) =>
                 handleFieldChange(fieldPath, templateValue, event.target.value)
               }
             >
               <option value="">Selecione</option>
+              {hasUnmappedOption ? (
+                <option value={String(normalizedValue)}>
+                  {String(normalizedValue)}
+                </option>
+              ) : null}
               {fieldOptions.map((option) => (
                 <option key={String(option.value)} value={String(option.value)}>
                   {option.label}
@@ -1457,26 +2852,71 @@ export default function GerenciaPage() {
               ))}
             </select>
           ) : (
-            <input
-              className="sigo-input"
-              type={getInputType(key, templateValue)}
-              value={displayValue}
-              disabled={formMode === "view"}
-              inputMode={
-                normalizeFieldKey(key).includes("cpf") ||
-                normalizeFieldKey(key).includes("cnpj") ||
-                normalizeFieldKey(key) === "cep"
-                  ? "numeric"
-                  : undefined
-              }
-              onChange={(event) =>
-                handleFieldChange(fieldPath, templateValue, event.target.value)
-              }
-            />
+            <>
+              <input
+                className="sigo-input"
+                type={getInputType(key, templateValue)}
+                value={displayValue}
+                disabled={formMode === "view"}
+                list={editableOptionsId}
+                placeholder={
+                  normalizeFieldKey(key).includes("cpf")
+                    ? "000.000.000-00"
+                    : normalizeFieldKey(key) === "cep"
+                      ? "00000-000"
+                      : normalizeFieldKey(key) === "placaveiculo"
+                        ? "ABC1D23 ou ABC1234"
+                        : normalizeFieldKey(key) === "chassiveiculo"
+                          ? "9BWZZZ377VT004251"
+                          : undefined
+                }
+                maxLength={
+                  normalizeFieldKey(key).includes("cpf")
+                    ? 14
+                    : normalizeFieldKey(key) === "cep"
+                      ? 9
+                      : normalizeFieldKey(key) === "placaveiculo"
+                        ? 7
+                        : normalizeFieldKey(key) === "chassiveiculo"
+                          ? 17
+                          : normalizeFieldKey(key) === "seguro"
+                            ? 30
+                            : undefined
+                }
+                minLength={normalizeFieldKey(key) === "seguro" ? 5 : undefined}
+                pattern={
+                  normalizeFieldKey(key) === "placaveiculo"
+                    ? "(?:[A-Z]{3}[0-9][A-Z][0-9]{2}|[A-Z]{3}[0-9]{4})"
+                    : normalizeFieldKey(key) === "chassiveiculo"
+                      ? "[A-HJ-NPR-Z0-9]{17}"
+                      : normalizeFieldKey(key) === "seguro"
+                        ? "[A-Za-z0-9./-]{5,30}"
+                        : undefined
+                }
+                inputMode={
+                  normalizeFieldKey(key).includes("cpf") ||
+                  normalizeFieldKey(key).includes("cnpj") ||
+                  normalizeFieldKey(key) === "cep"
+                    ? "numeric"
+                    : undefined
+                }
+                onChange={(event) =>
+                  handleFieldChange(fieldPath, templateValue, event.target.value)
+                }
+              />
+              {editableFieldOptions ? (
+                <datalist id={editableOptionsId}>
+                  {editableFieldOptions.map((option) => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+              ) : null}
+            </>
           )}
         </label>
       );
     });
+  };
 
   if (!selectedConfig) {
     return (
@@ -1491,7 +2931,12 @@ export default function GerenciaPage() {
     );
   }
 
-  const displayKeys = getDisplayKeys(selectedConfig.template, selectedConfig.key);
+  const displayColumns =
+    tableColumnsByEntity[selectedConfig.key] ??
+    getDisplayKeys(selectedConfig.template, selectedConfig.key).map((key) => ({
+      key,
+      label: formatFieldLabel(key),
+    }));
   const filteredItems = items.filter((item) => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return true;
@@ -1514,63 +2959,35 @@ export default function GerenciaPage() {
     <ProtectedRoute>
       <div className="sigo-page">
       <NavBar />
-      <main className="sigo-shell grid gap-6 py-8">
-        <DashboardTabs />
-
-        <header className="sigo-card overflow-hidden">
-          <div className="flex flex-col gap-3 bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] p-6 text-white sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-100">
-              Gerencia
-            </p>
-            <h1 className="mt-3 text-3xl font-black text-white lg:text-4xl">
-              Cadastros e registros
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-50">
-              Selecione uma área, consulte registros e mantenha as informações operacionais
-            </p>
-          </div>
-          </div>
-        </header>
-
-        <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-          <aside className="sigo-card h-fit overflow-hidden lg:sticky lg:top-28">
-            <div className="border-b border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] px-4 py-4">
-              <p className="text-xs font-black uppercase tracking-[0.12em] text-[var(--sigo-soft)]">
-                Entidades
-              </p>
-            </div>
-            <nav className="grid gap-2 p-3">
-              {entities.map((config) => (
-                <button
-                  key={config.key}
-                  type="button"
-                  className={`rounded-lg border px-4 py-3 text-left text-sm font-black ${
-                    config.key === selectedKey
-                      ? "border-transparent bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] text-white shadow-[0_12px_24px_rgba(7,95,189,0.2)]"
-                      : "border-[var(--sigo-border)] bg-white text-[var(--sigo-blue-deep)] hover:border-[var(--sigo-border-strong)] hover:bg-[var(--sigo-surface-soft)]"
-                  }`}
-                  onClick={() => setSelectedKey(config.key)}
-                >
-                  {config.label}
-                </button>
-              ))}
-            </nav>
-          </aside>
-
+      <main className="sigo-shell sigo-dashboard-shell sigo-management-shell grid gap-7 py-8 lg:grid-cols-[310px_minmax(0,1fr)] lg:items-start">
+        <DashboardSidebar
+          activeEntity={selectedConfig?.key}
+          availableEntities={entities.map((config) => config.key)}
+          onEntitySelect={selectEntity}
+        />
+        <div className="min-w-0">
           <section className="sigo-card overflow-hidden">
-            <div className="flex flex-col gap-3 border-b border-[var(--sigo-border)] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-[var(--sigo-border)] bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-base font-extrabold text-[var(--sigo-text)]">
+                <p className="mb-1 text-sm font-black uppercase tracking-[0.12em] text-[var(--sigo-blue)]">
+                  {selectedConfig.label}
+                </p>
+                <h2 className="text-xl font-extrabold text-[var(--sigo-text)]">
                   {filteredItems.length} de {items.length} registro(s).
                 </h2>
               </div>
               {canCreateSelected ? (
                 <button
                   type="button"
-                  className="sigo-button sigo-button-primary"
+                  className="sigo-button sigo-button-primary !rounded-[2px]"
                   onClick={openCreateForm}
                 >
+                  <img
+                    src="/mais.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-4 w-4 object-contain brightness-0 invert"
+                  />
                   Criar
                 </button>
               ) : null}
@@ -1605,27 +3022,28 @@ export default function GerenciaPage() {
                 </label>
               </div>
 
-              {isLoading ? (
-                <p className="text-sm font-semibold text-[var(--sigo-muted)]">
-                  Carregando...
-                </p>
-              ) : filteredItems.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-[var(--sigo-border-strong)] bg-[var(--sigo-surface-soft)] px-5 py-10 text-center">
+              <div className="h-[27.5rem] overflow-hidden">
+                {showLoading ? (
+                  <div className="flex h-full items-center justify-center">
+                    <SigoLoader key={loadingCycle} compact />
+                  </div>
+                ) : filteredItems.length === 0 ? (
+                <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-[var(--sigo-border-strong)] bg-[var(--sigo-surface-soft)] px-5 py-10 text-center">
                   <p className="text-sm font-bold text-[var(--sigo-muted)]">
                     Nenhum registro encontrado.
                   </p>
                 </div>
               ) : (
-                <div className="sigo-scrollbar overflow-auto rounded-lg border border-[var(--sigo-border)]">
-                  <table className="sigo-table min-w-[980px] table-auto">
+                <div className="sigo-scrollbar h-full overflow-auto rounded-lg border border-[var(--sigo-border)]">
+                  <table className="sigo-table sigo-management-table h-full min-w-[980px] table-auto">
                     <thead>
                       <tr>
-                        {displayKeys.map((key) => (
-                          <th key={key} className="whitespace-nowrap">
-                            {formatFieldLabel(key)}
+                        {displayColumns.map((column) => (
+                          <th key={column.key} className="whitespace-nowrap">
+                            {column.label}
                           </th>
                         ))}
-                        <th className="w-20 whitespace-nowrap text-center">Ações</th>
+                        <th className="w-24 whitespace-nowrap text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1633,18 +3051,97 @@ export default function GerenciaPage() {
                         const id = getItemId(item);
                         const rowIndex = pageStartIndex + index;
                         return (
-                          <tr key={`${selectedConfig.key}-${id ?? rowIndex}`}>
-                            {displayKeys.map((key) => (
-                              <td key={`${key}-${rowIndex}`} className="whitespace-nowrap">
-                                {formatValue(
-                                  key,
-                                  getRecordValue(item, key) ?? item[key],
-                                  relationOptions
-                                )}
-                              </td>
-                            ))}
-                            <td className="w-20 whitespace-nowrap">
-                              <div className="flex w-16 flex-nowrap items-center justify-center gap-2">
+                          <tr
+                            className="h-10 cursor-pointer"
+                            key={`${selectedConfig.key}-${id ?? rowIndex}`}
+                            role="button"
+                            tabIndex={0}
+                            title="Visualizar registro"
+                            onClick={() => handleEdit(item, "view")}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                void handleEdit(item, "view");
+                              }
+                            }}
+                          >
+                            {displayColumns.map((column) => {
+                              const storedValue =
+                                getRecordValue(item, column.key) ?? item[column.key];
+                              const rawValue =
+                                selectedConfig.key === "pecas" &&
+                                normalizeFieldKey(column.key) === "quantidade"
+                                  ? (() => {
+                                      const stock = Number(
+                                        getRecordValue(item, "quantidadeEstoque") ??
+                                          getRecordValue(item, "Quantidade_Estoque")
+                                      );
+                                      const unit = Number(getRecordValue(item, "Unidade"));
+                                      return Number.isFinite(stock) &&
+                                        Number.isFinite(unit) &&
+                                        unit > 0
+                                        ? Math.floor(stock / unit)
+                                        : storedValue;
+                                    })()
+                                  : storedValue;
+
+                              if (column.status) {
+                                const status = statusPresentation(rawValue, column.status);
+                                return (
+                                  <td key={`${column.key}-${rowIndex}`} className="whitespace-nowrap">
+                                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${status.className}`}>
+                                      {status.label}
+                                    </span>
+                                  </td>
+                                );
+                              }
+
+                              const value = column.relationKey
+                                ? findRelationLabel(
+                                    relationOptions,
+                                    column.relationKey,
+                                    rawValue
+                                  )
+                                : column.currency
+                                  ? currencyFormatter.format(Number(rawValue) || 0)
+                                  : formatValue(
+                                      column.key,
+                                      rawValue,
+                                      relationOptions
+                                    );
+
+                              return (
+                                <td key={`${column.key}-${rowIndex}`} className="whitespace-nowrap">
+                                  {value}
+                                </td>
+                              );
+                            })}
+                            <td
+                              className="w-24 whitespace-nowrap"
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <div className="flex w-24 flex-nowrap items-center justify-center gap-1">
+                                {selectedConfig.key === "pecas" && selectedCapability?.canUpdate ? (
+                                  <button
+                                    type="button"
+                                    className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent p-0.5 hover:bg-blue-50 disabled:opacity-50"
+                                    disabled={!id}
+                                    title="Ajustar quantidade do estoque"
+                                    aria-label="Ajustar quantidade do estoque"
+                                    onClick={() => void openStockAdjustment(item)}
+                                  >
+                                    <img
+                                      src="/mais.png"
+                                      alt=""
+                                      className="h-5 w-5 object-contain"
+                                      style={{
+                                        filter:
+                                          "brightness(0) saturate(100%) invert(34%) sepia(89%) saturate(1734%) hue-rotate(194deg) brightness(91%) contrast(101%)",
+                                      }}
+                                    />
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent p-0.5 hover:bg-[var(--sigo-surface-soft)] disabled:opacity-50"
@@ -1676,9 +3173,17 @@ export default function GerenciaPage() {
                                     onClick={() => id && handleDelete(id)}
                                   >
                                     <img
-                                      src="/delete.png"
+                                      src={
+                                        getDeleteActionLabel(selectedConfig.key) === "Inativar"
+                                          ? "/fechar.png"
+                                          : "/delete.png"
+                                      }
                                       alt=""
-                                      className="h-5 w-5 object-contain"
+                                      className={`h-5 w-5 object-contain ${
+                                        getDeleteActionLabel(selectedConfig.key) === "Inativar"
+                                          ? "brightness-0 saturate-100 [filter:invert(16%)_sepia(98%)_saturate(7046%)_hue-rotate(359deg)_brightness(101%)_contrast(117%)]"
+                                          : ""
+                                      }`}
                                     />
                                   </button>
                                 ) : (
@@ -1689,15 +3194,36 @@ export default function GerenciaPage() {
                           </tr>
                         );
                       })}
+                      {Array.from({
+                        length: Math.max(0, PAGE_SIZE - paginatedItems.length),
+                      }).map((_, index) => (
+                        <tr
+                          key={`empty-${normalizedPage}-${index}`}
+                          className="h-10"
+                          aria-hidden="true"
+                        >
+                          <td
+                            colSpan={displayColumns.length + 1}
+                            className="bg-white"
+                          >
+                            &nbsp;
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-              )}
+                )}
+              </div>
 
-              {!isLoading && filteredItems.length > 0 ? (
-                <div className="mt-4 flex flex-col gap-3 rounded-lg border border-[var(--sigo-border)] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div
+                  className={`mt-4 flex min-h-[3.75rem] flex-col gap-3 rounded-lg border border-[var(--sigo-border)] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
+                    showLoading ? "invisible" : ""
+                  }`}
+                  aria-hidden={showLoading}
+                >
                   <p className="text-sm font-semibold text-[var(--sigo-muted)]">
-                    Mostrando {pageStartIndex + 1}-
+                    Mostrando {filteredItems.length > 0 ? pageStartIndex + 1 : 0}-
                     {Math.min(pageStartIndex + PAGE_SIZE, filteredItems.length)} de{" "}
                     {filteredItems.length} registro(s)
                   </p>
@@ -1713,7 +3239,7 @@ export default function GerenciaPage() {
                       Anterior
                     </button>
                     <span className="sigo-badge">
-                      Pagina {normalizedPage} de {totalPages}
+                      Página {normalizedPage} de {totalPages}
                     </span>
                     <button
                       type="button"
@@ -1723,46 +3249,48 @@ export default function GerenciaPage() {
                         setCurrentPage((page) => Math.min(totalPages, page + 1))
                       }
                     >
-                      Proxima
+                      Próxima
                     </button>
                   </div>
                 </div>
-              ) : null}
             </div>
           </section>
         </div>
       </main>
 
       {showForm ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/60 px-4 py-8">
-          <div className="sigo-card w-full max-w-4xl overflow-hidden">
-            <div className="flex flex-col gap-3 bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-950/60 p-4">
+          <div className="sigo-card flex max-h-[calc(100vh-5rem)] w-full max-w-3xl flex-col overflow-hidden">
+            <div className="shrink-0 flex flex-col gap-3 bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-100">
-                  {selectedConfig.label}
-                </p>
-                <h2 className="mt-1 text-xl font-black text-white">
+                <h2 className="text-xl font-black text-white">
                   {formMode === "view"
                     ? `Ver ${selectedConfig.label}`
                     : formMode === "edit"
                       ? `Editar ${selectedConfig.label}`
                       : `Criar ${selectedConfig.label}`}
                 </h2>
-
               </div>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-md bg-transparent text-2xl font-black leading-none text-white hover:bg-white/10"
+                onClick={() => setShowForm(false)}
+                aria-label="Fechar formulário"
+                title="Fechar"
+              >
+                ×
+              </button>
             </div>
 
-            <div className="sigo-scrollbar max-h-[72vh] overflow-y-auto p-5">
+            <div className="sigo-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
               <div className="rounded-lg border border-[var(--sigo-border)] bg-white p-4">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--sigo-border)] pb-4">
-                  <div>
-                    <p className="text-sm font-black text-[var(--sigo-text)]">
-                      Informações do registro
-                    </p>
-                  </div>
-                </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                {renderFields(selectedConfig.template, formData)}
+                {renderFields(
+                  formMode === "create"
+                    ? getCreateTemplate(selectedConfig)
+                    : selectedConfig.template,
+                  formData
+                )}
                 </div>
                 {renderImageField()}
               </div>
@@ -1772,11 +3300,16 @@ export default function GerenciaPage() {
                   {error}
                 </div>
               ) : null}
+            </div>
 
-              <div className="mt-6 flex flex-col-reverse gap-3 border-t border-[var(--sigo-border)] pt-5 sm:flex-row sm:items-center sm:justify-end">
+              <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[var(--sigo-border)] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
                 <button
                   type="button"
-                  className="sigo-button"
+                  className={`sigo-button !border-transparent !bg-transparent shadow-none ${
+                    formMode === "view"
+                      ? ""
+                      : "!text-red-600 hover:!bg-red-50"
+                  }`}
                   onClick={() => setShowForm(false)}
                 >
                   {formMode === "view" ? "Fechar" : "Cancelar"}
@@ -1784,21 +3317,106 @@ export default function GerenciaPage() {
                 {formMode !== "view" ? (
                   <button
                     type="button"
-                    className="sigo-button sigo-button-primary"
+                    className={`sigo-button !rounded-[2px] ${
+                      formMode === "create"
+                        ? "!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700"
+                        : "sigo-button-primary"
+                    }`}
                     disabled={
                       isLoading ||
                       (formMode === "edit" && !selectedConfig.updatePath)
                     }
                     onClick={formMode === "edit" ? handleUpdate : handleCreate}
                   >
+                    {formMode === "create" && !isLoading ? (
+                      <img
+                        src="/mais.png"
+                        alt=""
+                        aria-hidden="true"
+                        className="h-4 w-4 object-contain brightness-0 invert"
+                      />
+                    ) : null}
                     {isLoading
                       ? "Salvando..."
                       : formMode === "edit"
-                        ? "Salvar alteracoes"
-                        : "Criar registro"}
+                        ? "Salvar alterações"
+                        : "Criar"}
                   </button>
                 ) : null}
               </div>
+          </div>
+        </div>
+      ) : null}
+      {stockAdjustmentItem ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="sigo-card w-full max-w-md overflow-hidden bg-white">
+            <div className="flex items-center justify-between bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4 text-white">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.1em] text-white/75">Estoque</p>
+                <h2 className="mt-1 text-lg font-black text-white">
+                  {String(getRecordValue(stockAdjustmentItem, "Nome") ?? "Peça")}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center bg-transparent text-2xl font-black text-white hover:bg-white/10"
+                onClick={() => {
+                  setStockAdjustmentItem(null);
+                  setError(null);
+                }}
+                aria-label="Fechar"
+              >
+                ×
+              </button>
+            </div>
+            <div className="grid gap-4 p-5">
+              <div className="rounded-sm border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4">
+                <p className="text-xs font-bold text-[var(--sigo-muted)]">Quantidade no estoque</p>
+                <p className="mt-1 text-3xl font-black text-[var(--sigo-blue-deep)]">
+                  {Math.floor(
+                    Math.max(
+                      0,
+                      Number(
+                        getRecordValue(stockAdjustmentItem, "quantidadeEstoque") ??
+                          getRecordValue(stockAdjustmentItem, "Quantidade_Estoque") ??
+                          0
+                      )
+                    ) /
+                      Math.max(1, Math.floor(Number(getRecordValue(stockAdjustmentItem, "Unidade")) || 1))
+                  )}
+                </p>
+              </div>
+              <label className="sigo-label">
+                <span>Quantidade para ajustar</span>
+                <input
+                  className="sigo-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={stockAdjustmentAmount}
+                  onChange={(event) => setStockAdjustmentAmount(Number(event.target.value))}
+                />
+              </label>
+              {error ? <div className="sigo-error px-4 py-3 text-sm font-semibold">{error}</div> : null}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-[var(--sigo-border)] bg-white px-5 py-4">
+              <button
+                type="button"
+                className="sigo-button !border-red-200 !text-red-600 hover:!bg-red-50"
+                disabled={stockAdjustmentSaving}
+                onClick={() => void handleStockAdjustment("subtract")}
+              >
+                Diminuir
+              </button>
+              <button
+                type="button"
+                className="sigo-button sigo-button-primary"
+                disabled={stockAdjustmentSaving}
+                onClick={() => void handleStockAdjustment("add")}
+              >
+                <img src="/mais.png" alt="" aria-hidden="true" className="h-4 w-4 brightness-0 invert" />
+                {stockAdjustmentSaving ? "Salvando..." : "Adicionar"}
+              </button>
             </div>
           </div>
         </div>

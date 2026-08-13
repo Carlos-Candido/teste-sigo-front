@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { routes } from "@/navigation/routes";
 
 const tabs = [
-  { label: "Visao Geral", href: routes.dashboard },
+  { label: "Dashboard", href: routes.dashboard },
   { label: "Gerencia", href: routes.management },
   { label: "Analise e Metricas", href: routes.analytics },
   { label: "Perfil", href: routes.profile },

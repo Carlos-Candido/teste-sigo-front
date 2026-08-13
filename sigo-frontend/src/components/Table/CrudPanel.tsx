@@ -33,6 +33,7 @@ export type CrudConfig = {
   updatePath?: (id: string) => string;
   deletePath?: (id: string) => string;
   template: Record<string, unknown>;
+  createTemplate?: Record<string, unknown>;
   listFields?: ListFieldConfig[];
   searches?: SearchConfig[];
   actions?: ActionConfig[];
@@ -57,7 +58,9 @@ const cloneTemplate = (value: Record<string, unknown>) =>
 export function CrudPanel({ config, baseUrl, token }: CrudPanelProps) {
   const [listResult, setListResult] = useState<ApiResult | null>(null);
   const [getResult, setGetResult] = useState<ApiResult | null>(null);
-  const [createJson, setCreateJson] = useState(toJson(config.template));
+  const [createJson, setCreateJson] = useState(
+    toJson(config.createTemplate ?? config.template)
+  );
   const [updateJson, setUpdateJson] = useState(toJson(config.template));
   const [getId, setGetId] = useState("");
   const [updateId, setUpdateId] = useState("");

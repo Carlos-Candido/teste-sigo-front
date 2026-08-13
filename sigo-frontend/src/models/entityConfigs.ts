@@ -5,6 +5,16 @@ import type {
   ActionConfig,
 } from "@/components/Table/CrudPanel";
 
+const getTodayIso = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const TODAY_ISO = getTodayIso();
+
 const telefoneTemplate = {
   Id: 0,
   Numero: "",
@@ -12,11 +22,16 @@ const telefoneTemplate = {
   ClienteId: 0,
 };
 
+const preCadastroTelefoneTemplate = {
+  ddd: 0,
+  numero: "",
+};
+
 const pedidoPecaTemplate = {
   IdPedido: 0,
   IdPeca: 0,
   Quantidade: 0,
-  DataInstalacao: "2026-01-01",
+  DataInstalacao: TODAY_ISO,
   Estado: "",
   Observacao: "",
 };
@@ -150,6 +165,24 @@ export const entityConfigs: CrudConfig[] = [
     updatePath: (id) => `/api/v1/clientes/${id}`,
     deletePath: (id) => `/api/v1/clientes/${id}`,
     searches: clienteSearches,
+    createTemplate: {
+      cpf: "",
+      nome: "",
+      email: "",
+      obs: "",
+      razao: "",
+      dataNasc: TODAY_ISO,
+      sexo: 3,
+      numero: 0,
+      rua: "",
+      cidade: "",
+      cep: "",
+      bairro: "",
+      estado: "",
+      pais: "Brasil",
+      complemento: "",
+      telefones: [preCadastroTelefoneTemplate],
+    },
     template: {
       Id: 0,
       Nome: "",
@@ -157,14 +190,14 @@ export const entityConfigs: CrudConfig[] = [
       Cpf_Cnpj: "",
       Obs: "",
       razao: "",
-      DataNasc: "2026-01-01",
+      DataNasc: TODAY_ISO,
       Numero: 0,
       Rua: "",
       Cidade: "",
       Cep: "",
       Bairro: "",
       Estado: "",
-      Pais: "",
+      Pais: "Brasil",
       Complemento: "",
       Sexo: 1,
       TipoCliente: 1,
@@ -193,7 +226,7 @@ export const entityConfigs: CrudConfig[] = [
       Cep: 0,
       Bairro: "",
       Estado: "",
-      Pais: "",
+      Pais: "Brasil",
       Complemento: "",
       Senha: "",
       Situacao: 1,
@@ -249,7 +282,7 @@ export const entityConfigs: CrudConfig[] = [
       Nome: "",
       Descricao: "",
       Valor: 0,
-      Garantia: "2026-01-01",
+      Garantia: TODAY_ISO,
       IdOficina: 0,
       Funcionario_Servicos: [funcionarioServicoTemplate],
     },
@@ -270,10 +303,11 @@ export const entityConfigs: CrudConfig[] = [
       Descricao: "",
       Valor: 0,
       Quantidade: 0,
-      Garantia: "2026-01-01",
+      quantidadeEstoque: 0,
+      Garantia: TODAY_ISO,
       Unidade: 0,
       IdMarca: 0,
-      DataAquisicao: "2026-01-01",
+      DataAquisicao: TODAY_ISO,
       Fornecedor: "",
       IdOficina: 0,
     },
@@ -302,8 +336,9 @@ export const entityConfigs: CrudConfig[] = [
       DescontoPecaPorcentagem: 0,
       descontoPecaReais: 0,
       Observacao: "",
-      DataInicio: "2026-01-01",
-      DataFim: "2026-01-02",
+      DataInicio: TODAY_ISO,
+      DataFim: TODAY_ISO,
+      Status: 0,
       Pedido_Pecas: [pedidoPecaTemplate],
       Pedido_Servicos: [pedidoServicoTemplate],
     },

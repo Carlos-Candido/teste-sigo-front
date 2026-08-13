@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { normalizeRole } from "@/lib/accessControl";
 import { routes } from "@/navigation/routes";
+import { SigoLoader } from "@/components/Loading/SigoLoader";
 
 function RouteLoading() {
   return (
-    <div className="sigo-page flex min-h-screen items-center justify-center px-4 text-sm font-semibold text-[var(--sigo-muted)]">
-      Carregando...
+    <div className="sigo-page flex min-h-screen items-center justify-center px-4">
+      <SigoLoader />
     </div>
   );
 }

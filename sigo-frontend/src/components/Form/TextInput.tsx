@@ -8,6 +8,7 @@ type TextInputProps = {
   error?: string | null;
   className?: string;
   inputClassName?: string;
+  disabled?: boolean;
 };
 
 export function TextInput({
@@ -20,6 +21,7 @@ export function TextInput({
   error,
   className = "",
   inputClassName = "",
+  disabled = false,
 }: TextInputProps) {
   return (
     <label className={`sigo-label ${className}`.trim()}>
@@ -31,6 +33,7 @@ export function TextInput({
         type={type}
         placeholder={placeholder}
         aria-invalid={Boolean(error)}
+        disabled={disabled}
       />
       {error ? (
         <span className="text-xs font-semibold text-[var(--sigo-danger)]">

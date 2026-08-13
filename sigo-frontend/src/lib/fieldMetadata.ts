@@ -67,9 +67,9 @@ export const enumOptionsByKey: Record<string, SelectOption[]> = {
   ],
   status: [
     { value: 0, label: "Pendente" },
-    { value: 1, label: "Aguardando pecas" },
+    { value: 1, label: "Aguardando peças" },
     { value: 2, label: "Em andamento" },
-    { value: 3, label: "Concluido" },
+    { value: 3, label: "Concluído" },
   ],
   tipocliente: [
     { value: 1, label: "Fisico" },
@@ -78,33 +78,33 @@ export const enumOptionsByKey: Record<string, SelectOption[]> = {
 };
 
 export const stateOptions: SelectOption[] = [
-  { value: "AC", label: "AC - Acre" },
-  { value: "AL", label: "AL - Alagoas" },
-  { value: "AP", label: "AP - Amapa" },
-  { value: "AM", label: "AM - Amazonas" },
-  { value: "BA", label: "BA - Bahia" },
-  { value: "CE", label: "CE - Ceara" },
-  { value: "DF", label: "DF - Distrito Federal" },
-  { value: "ES", label: "ES - Espirito Santo" },
-  { value: "GO", label: "GO - Goias" },
-  { value: "MA", label: "MA - Maranhao" },
-  { value: "MT", label: "MT - Mato Grosso" },
-  { value: "MS", label: "MS - Mato Grosso do Sul" },
-  { value: "MG", label: "MG - Minas Gerais" },
-  { value: "PA", label: "PA - Para" },
-  { value: "PB", label: "PB - Paraiba" },
-  { value: "PR", label: "PR - Parana" },
-  { value: "PE", label: "PE - Pernambuco" },
-  { value: "PI", label: "PI - Piaui" },
-  { value: "RJ", label: "RJ - Rio de Janeiro" },
-  { value: "RN", label: "RN - Rio Grande do Norte" },
-  { value: "RS", label: "RS - Rio Grande do Sul" },
-  { value: "RO", label: "RO - Rondonia" },
-  { value: "RR", label: "RR - Roraima" },
-  { value: "SC", label: "SC - Santa Catarina" },
-  { value: "SP", label: "SP - Sao Paulo" },
-  { value: "SE", label: "SE - Sergipe" },
-  { value: "TO", label: "TO - Tocantins" },
+  { value: "AC", label: "AC" },
+  { value: "AL", label: "AL" },
+  { value: "AP", label: "AP" },
+  { value: "AM", label: "AM" },
+  { value: "BA", label: "BA" },
+  { value: "CE", label: "CE" },
+  { value: "DF", label: "DF" },
+  { value: "ES", label: "ES" },
+  { value: "GO", label: "GO" },
+  { value: "MA", label: "MA" },
+  { value: "MT", label: "MT" },
+  { value: "MS", label: "MS" },
+  { value: "MG", label: "MG" },
+  { value: "PA", label: "PA" },
+  { value: "PB", label: "PB" },
+  { value: "PR", label: "PR" },
+  { value: "PE", label: "PE" },
+  { value: "PI", label: "PI" },
+  { value: "RJ", label: "RJ" },
+  { value: "RN", label: "RN" },
+  { value: "RS", label: "RS" },
+  { value: "RO", label: "RO" },
+  { value: "RR", label: "RR" },
+  { value: "SC", label: "SC" },
+  { value: "SP", label: "SP" },
+  { value: "SE", label: "SE" },
+  { value: "TO", label: "TO" },
 ];
 
 const relationEntityByKey: Record<string, string> = {
@@ -232,25 +232,32 @@ export const buildEntityLabel = (
   item: Record<string, unknown>
 ): string => {
   const fieldsByEntity: Record<string, string[]> = {
-    clientes: ["Nome", "nome", "Email", "Cpf_Cnpj"],
-    oficinas: ["Nome", "nome", "Email", "CNPJ"],
-    funcionarios: ["Nome", "nome", "Cargo", "Email"],
-    marcas: ["Nome", "nome", "TipoMarca"],
-    servicos: ["Nome", "nome", "Descricao"],
-    pecas: ["Nome", "nome", "Tipo"],
-    veiculos: ["NomeVeiculo", "PlacaVeiculo", "ChassiVeiculo"],
+    clientes: ["Nome", "nome"],
+    oficinas: ["Nome", "nome"],
+    funcionarios: ["Nome", "nome"],
+    marcas: ["Nome", "nome"],
+    servicos: ["Nome", "nome"],
+    pecas: ["Nome", "nome"],
+    veiculos: ["NomeVeiculo", "nomeVeiculo", "Nome", "nome"],
     pedidos: ["Id", "id", "Observacao"],
   };
 
   const fields = fieldsByEntity[entityKey] ?? ["Nome", "nome", "Descricao"];
   const labelParts = fields
-    .map((field) => item[field])
+    .map((field) => {
+      const normalizedField = normalizeFieldKey(field);
+      const matchingKey = Object.keys(item).find(
+        (candidate) => normalizeFieldKey(candidate) === normalizedField
+      );
+      return matchingKey ? item[matchingKey] : undefined;
+    })
     .filter((value) => value !== null && value !== undefined && value !== "")
-    .map((value) => String(value));
+    .map((value) => String(value))
+    .filter((value, index, values) => values.indexOf(value) === index);
 
   const id = getRecordId(item);
   if (entityKey === "pedidos" && id) return `Pedido #${id}`;
-  if (labelParts.length > 0) return labelParts.slice(0, 2).join(" - ");
+  if (labelParts.length > 0) return labelParts[0];
   return id ? `#${id}` : "Registro";
 };
 
