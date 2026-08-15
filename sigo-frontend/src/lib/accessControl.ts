@@ -68,18 +68,11 @@ const roleCapabilities: Record<
     marcas: fullCapability,
   },
   funcionario: {
-    clientes: {
-      ...readOnlyScoped,
-      canCreate: true,
-      canUpdate: true,
-      canDelete: true,
-    },
-    funcionarios: readOnlyScoped,
-    veiculos: editableNoDelete,
+    clientes: readOnlyScoped,
+    veiculos: fullCapability,
     pecas: fullCapability,
     servicos: fullCapability,
     pedidos: editableNoDelete,
-    marcas: editableNoDelete,
   },
   cliente: {
     clientes: clientProfileCapability,

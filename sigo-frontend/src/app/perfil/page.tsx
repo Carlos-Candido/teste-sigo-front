@@ -287,6 +287,7 @@ export default function PerfilPage() {
     logout,
   } = useAuth();
   const normalizedRole = normalizeRole(userRole);
+  const canManageOwnProfile = normalizedRole !== "funcionario";
   const entityKey = getProfileEntityKey(userRole);
   const editableFields = useMemo(
     () => getProfileEditableFields(userRole),
@@ -770,24 +771,30 @@ export default function PerfilPage() {
                   {fullName || "Minha conta"}
                 </h1>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="sigo-button bg-white text-[var(--sigo-blue-deep)]"
-                  onClick={() => setIsEditing(true)}
-                  disabled={isLoading || !config}
-                >
-                  Editar minha conta
-                </button>
-                <button
-                  type="button"
-                  className="sigo-button sigo-button-danger bg-white"
-                  onClick={() => setConfirmDelete(true)}
-                  disabled={isLoading || !config?.deletePath || !profileId}
-                >
-                  Deletar minha conta
-                </button>
-              </div>
+              {canManageOwnProfile ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="sigo-button bg-white text-[var(--sigo-blue-deep)]"
+                    onClick={() => setIsEditing(true)}
+                    disabled={isLoading || !config}
+                  >
+                    Editar minha conta
+                  </button>
+                  <button
+                    type="button"
+                    className="sigo-button sigo-button-danger bg-white"
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={isLoading || !config?.deletePath || !profileId}
+                  >
+                    Deletar minha conta
+                  </button>
+                </div>
+              ) : (
+                <p className="max-w-sm text-sm font-semibold leading-6 text-blue-100">
+                  A edição dos dados e da senha do funcionário é administrada pela oficina.
+                </p>
+              )}
             </div>
           </section>
 

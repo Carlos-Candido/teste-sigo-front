@@ -22,7 +22,7 @@ const extractLoginError = (data: unknown): string | null => {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, userRole } = useAuth();
+  const { login } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [accountType, setAccountType] = useState<"cliente" | "funcionario" | "oficina">("funcionario");
@@ -43,7 +43,11 @@ export default function LoginPage() {
     const result = await login({ email: identifier, password, accountType });
     if (result.ok) {
       router.replace(
-        userRole.toLowerCase() === "cliente" ? routes.clientHome : routes.dashboard
+        accountType === "cliente"
+          ? routes.clientHome
+          : accountType === "funcionario"
+            ? routes.employeeHome
+            : routes.dashboard
       );
     } else {
       setError(extractLoginError(result.data) ?? "Não foi possível entrar.");
@@ -144,14 +148,12 @@ export default function LoginPage() {
             </button>
 
             <div className="-mx-6 flex flex-col gap-2 border-t border-[var(--sigo-border)] px-6 pt-5 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-[var(--sigo-muted)]">
-                Ainda não tem conta?
-              </span>
+              <span className="text-[var(--sigo-muted)]">Esqueceu sua senha?</span>
               <Link
                 className="font-bold text-[var(--sigo-blue)] hover:text-[var(--sigo-blue-dark)]"
-                href={routes.register}
+                href={routes.resetPassword}
               >
-                Criar Conta
+                Redefinir senha
               </Link>
             </div>
 

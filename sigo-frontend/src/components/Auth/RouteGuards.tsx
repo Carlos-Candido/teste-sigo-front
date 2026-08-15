@@ -16,7 +16,11 @@ function RouteLoading() {
 }
 
 const getRoleHome = (role: RoleKey) =>
-  role === "cliente" ? routes.clientHome : routes.dashboard;
+  role === "cliente"
+    ? routes.clientHome
+    : role === "funcionario"
+      ? routes.employeeHome
+      : routes.dashboard;
 
 type ProtectedRouteProps = {
   children: React.ReactNode;

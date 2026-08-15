@@ -16,6 +16,8 @@ const managementItems = [
   { key: "pedidos", label: "Ordem de serviço (Pedido)", icon: "/prancheta.png" },
 ];
 
+const employeeManagementKeys = ["clientes", "veiculos", "servicos", "pecas", "pedidos"];
+
 type DashboardSidebarProps = {
   activeEntity?: string;
   availableEntities?: string[];
@@ -40,17 +42,21 @@ export function DashboardSidebar({ activeEntity, availableEntities, onEntitySele
   const pathname = usePathname();
   const { userRole } = useAuth();
   const isOffice = normalizeRole(userRole) === "oficina";
-  const visibleManagementItems = availableEntities
-    ? managementItems.filter((item) => availableEntities.includes(item.key))
-    : managementItems;
+  const isEmployee = normalizeRole(userRole) === "funcionario";
+  const visibleManagementItems = managementItems.filter((item) => {
+    if (isEmployee && !employeeManagementKeys.includes(item.key)) return false;
+    return !availableEntities || availableEntities.includes(item.key);
+  });
 
   return (
     <aside className="sigo-dashboard-sidebar self-stretch">
-      <nav className="sigo-dashboard-sidebar-nav grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1" aria-label="Navegação da oficina">
-        <Link className={itemClass(pathname === routes.dashboard)} href={routes.dashboard}>
-          <SidebarIcon src="/casa.png" />
-          <span>Dashboard</span>
-        </Link>
+      <nav className="sigo-dashboard-sidebar-nav grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1" aria-label={isEmployee ? "Navegação do funcionário" : "Navegação da oficina"}>
+        {!isEmployee ? (
+          <Link className={itemClass(pathname === routes.dashboard)} href={routes.dashboard}>
+            <SidebarIcon src="/casa.png" />
+            <span>Dashboard</span>
+          </Link>
+        ) : null}
         {visibleManagementItems.map((item) => {
           const active = pathname === routes.management && activeEntity === item.key;
           return (
@@ -61,14 +67,16 @@ export function DashboardSidebar({ activeEntity, availableEntities, onEntitySele
               onClick={() => onEntitySelect?.(item.key)}
             >
               <SidebarIcon src={item.icon} />
-              <span>{item.label}</span>
+              <span>{isEmployee ? ({ clientes: "Cliente", veiculos: "Veículo", servicos: "Serviços", pecas: "Estoque", pedidos: "Ordem de Pedido" } as Record<string, string>)[item.key] ?? item.label : item.label}</span>
             </Link>
           );
         })}
-        <Link className={itemClass(pathname === routes.analytics)} href={routes.analytics}>
-          <SidebarIcon src="/elevacao.png" />
-          <span>Análise</span>
-        </Link>
+        {!isEmployee ? (
+          <Link className={itemClass(pathname === routes.analytics)} href={routes.analytics}>
+            <SidebarIcon src="/elevacao.png" />
+            <span>Análise</span>
+          </Link>
+        ) : null}
         {isOffice ? (
           <Link className={itemClass(pathname === routes.audit)} href={routes.audit}>
             <SidebarIcon src="/red-eyes.png" />

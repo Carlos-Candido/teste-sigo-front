@@ -356,7 +356,7 @@ export default function AnaliseMetricasPage() {
   ];
 
   return (
-    <ProtectedRoute allowedRoles={["oficina", "funcionario"]}>
+    <ProtectedRoute allowedRoles={["oficina"]}>
       <div className="sigo-page">
         <NavBar />
         <main className="sigo-shell sigo-dashboard-shell sigo-management-shell grid gap-7 py-8 lg:grid-cols-[310px_minmax(0,1fr)] lg:items-start">
