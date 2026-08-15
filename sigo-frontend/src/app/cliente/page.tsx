@@ -56,8 +56,11 @@ const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 const formatMoney = (value: unknown) => money.format(Number(value) || 0);
 const formatDate = (value: unknown) => {
   if (!value) return "-";
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("pt-BR");
+  const text = String(value);
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnly) return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? text : date.toLocaleDateString("pt-BR");
 };
 
 const fieldLabels: Record<string, string> = {
@@ -70,25 +73,99 @@ const fieldLabels: Record<string, string> = {
 };
 const normalizeKey = (value: string) => value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 const formatFieldLabel = (key: string) => fieldLabels[normalizeKey(key)] ?? key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
-const relationByField: Record<string, string> = { idpeca: "pecas", idservico: "servicos", idcliente: "clientes", idfuncionario: "funcionarios", idveiculo: "veiculos", idmarca: "marcas" };
-const resolveDisplayValue = (key: string, value: unknown, catalogs: Record<string, RecordValue[]>): string => {
-  const relation = relationByField[normalizeKey(key)];
-  if (relation) {
-    const record = (catalogs[relation] ?? []).find((item) => String(getId(item)) === String(value));
-    if (record) return String(getValue(record, "Nome", "NomeVeiculo", "Razao") ?? value ?? "-");
+const relationByField: Record<string, string> = {
+  idpeca: "pecas",
+  idservico: "servicos",
+  idcliente: "clientes",
+  idfuncionario: "funcionarios",
+  idveiculo: "veiculos",
+  idmarca: "marcas",
+};
+
+const relationNameFields: Record<string, string[]> = {
+  idpeca: ["NomePeca", "PecaNome", "Nome"],
+  idservico: ["NomeServico", "ServicoNome", "Nome"],
+  idcliente: ["NomeCliente", "ClienteNome", "Nome"],
+  idfuncionario: ["NomeFuncionario", "FuncionarioNome", "Nome"],
+  idveiculo: ["NomeVeiculo", "VeiculoNome", "ModeloVeiculo", "Modelo", "PlacaVeiculo", "Placa"],
+  idmarca: ["NomeMarca", "MarcaNome", "Nome"],
+};
+
+const relationObjectFields: Record<string, string[]> = {
+  idpeca: ["Peca", "Peça"],
+  idservico: ["Servico", "Serviço"],
+  idcliente: ["Cliente"],
+  idfuncionario: ["Funcionario", "Funcionário"],
+  idveiculo: ["Veiculo", "Veículo"],
+  idmarca: ["Marca"],
+};
+
+const getRelationNameFromSource = (key: string, source?: RecordValue): string | null => {
+  if (!source) return null;
+  const normalized = normalizeKey(key);
+
+  for (const field of relationNameFields[normalized] ?? []) {
+    const candidate = getValue(source, field);
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
   }
-  if (normalizeKey(key).startsWith("data")) return formatDate(value);
+
+  for (const field of relationObjectFields[normalized] ?? []) {
+    const candidate = getValue(source, field);
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    if (isRecord(candidate)) {
+      for (const nameField of relationNameFields[normalized] ?? ["Nome"]) {
+        const name = getValue(candidate, nameField);
+        if (typeof name === "string" && name.trim()) return name.trim();
+      }
+    }
+  }
+
+  return null;
+};
+
+const resolveDisplayValue = (
+  key: string,
+  value: unknown,
+  catalogs: Record<string, RecordValue[]>,
+  source?: RecordValue
+): string => {
+  const normalized = normalizeKey(key);
+  if (normalized === "status") {
+    const statuses: Record<string, string> = {
+      "0": "Pendente",
+      "1": "Aguardando peças",
+      "2": "Em andamento",
+      "3": "Concluído",
+    };
+    return statuses[String(value ?? "")] ?? String(value ?? "-");
+  }
+
+  const relation = relationByField[normalized];
+  if (relation) {
+    const embeddedName = getRelationNameFromSource(key, source);
+    if (embeddedName) return embeddedName;
+
+    const record = (catalogs[relation] ?? []).find(
+      (item) => String(getId(item)) === String(value)
+    );
+    if (record) {
+      const catalogName = getRelationNameFromSource(key, record);
+      if (catalogName) return catalogName;
+    }
+
+    return "Não informado";
+  }
+  if (normalized.startsWith("data")) return formatDate(value);
   return String(value ?? "-");
 };
 
 function VehicleDetailsModal({ vehicle, images, catalogs, onClose }: { vehicle: RecordValue; images: string[]; catalogs: Record<string, RecordValue[]>; onClose: () => void }) {
   const fields: Array<[string, unknown]> = [
-    ["Nome", getValue(vehicle, "NomeVeiculo", "Nome")], ["Tipo", getValue(vehicle, "TipoVeiculo")],
+    ["Nome", getValue(vehicle, "NomeVeiculo", "Nome")], ["Modelo", getValue(vehicle, "ModeloVeiculo", "Modelo")],
     ["Placa", getValue(vehicle, "PlacaVeiculo")], ["Chassi", getValue(vehicle, "ChassiVeiculo")],
     ["Ano de fabricação", getValue(vehicle, "AnoFab")], ["Quilometragem", getValue(vehicle, "Quilometragem")],
     ["Combustível", getValue(vehicle, "Combustivel")], ["Seguro", getValue(vehicle, "Seguro")],
-    ["Cor", getValue(vehicle, "Cor")], ["Status", getValue(vehicle, "Status", "Situacao")],
-    ["Marca", resolveDisplayValue("IdMarca", getValue(vehicle, "IdMarca", "MarcaId"), catalogs)],
+    ["Cor", getValue(vehicle, "Cor")],
   ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
@@ -116,12 +193,12 @@ function VehicleDetailsModal({ vehicle, images, catalogs, onClose }: { vehicle: 
 
 function OrderDetailsModal({ order, catalogs, onClose }: { order: RecordValue; catalogs: Record<string, RecordValue[]>; onClose: () => void }) {
   const fields: Array<[string, unknown]> = [
-    ["Cliente", resolveDisplayValue("idCliente", getValue(order, "idCliente", "ClienteId"), catalogs)],
-    ["Funcionário", resolveDisplayValue("idFuncionario", getValue(order, "idFuncionario", "FuncionarioId"), catalogs)],
-    ["Veículo", resolveDisplayValue("idVeiculo", getValue(order, "idVeiculo", "VeiculoId", "__vehicleId"), catalogs)],
+    ["Cliente", resolveDisplayValue("idCliente", getValue(order, "idCliente", "ClienteId"), catalogs, order)],
+    ["Funcionário", resolveDisplayValue("idFuncionario", getValue(order, "idFuncionario", "FuncionarioId"), catalogs, order)],
+    ["Veículo", resolveDisplayValue("idVeiculo", getValue(order, "idVeiculo", "VeiculoId", "__vehicleId"), catalogs, order)],
     ["Data de início", formatDate(getValue(order, "DataInicio"))],
     ["Data de término", formatDate(getValue(order, "DataFim"))],
-    ["Status", getValue(order, "Status", "Situacao")],
+    ["Status", resolveDisplayValue("Status", getValue(order, "Status", "Situacao"), catalogs)],
     ["Valor total", formatMoney(getValue(order, "ValorTotal"))],
     ["Observação", getValue(order, "Observacao")],
   ];
@@ -129,7 +206,7 @@ function OrderDetailsModal({ order, catalogs, onClose }: { order: RecordValue; c
     ["Peças", getValue(order, "Pedido_Pecas", "PedidoPecas")],
     ["Serviços", getValue(order, "Pedido_Servicos", "PedidoServicos")],
   ];
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"><div className="sigo-card flex max-h-[calc(100vh-4rem)] w-full max-w-3xl flex-col overflow-hidden bg-white"><header className="flex shrink-0 items-center justify-between bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4 text-white"><h2 className="text-xl font-black text-white">Ver Pedido #{getId(order) ?? ""}</h2><button type="button" className="text-2xl font-black" onClick={onClose} aria-label="Fechar">×</button></header><div className="sigo-scrollbar min-h-0 flex-1 overflow-y-auto p-4"><div className="rounded-lg border border-[var(--sigo-border)] bg-white p-4"><div className="grid gap-4 md:grid-cols-2">{fields.map(([label, value]) => <label key={label} className="rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3"><span className="mb-2 block text-xs font-bold text-[var(--sigo-muted)]">{label}</span><input className="sigo-input bg-white" value={String(value ?? "-")} readOnly /></label>)}</div>{groups.map(([label, value]) => { const items = Array.isArray(value) ? value.filter(isRecord) : []; return <section key={label} className="mt-4 overflow-hidden rounded-lg border border-[var(--sigo-border)] bg-white shadow-[var(--sigo-shadow-sm)]"><header className="border-b border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] px-4 py-3"><p className="text-sm font-black text-[var(--sigo-text)]">{label}</p></header><div className="grid gap-3 p-4">{items.length ? items.map((item, index) => <div key={`${label}-${index}`} className="grid gap-3 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4 sm:grid-cols-2">{Object.entries(item).filter(([, itemValue]) => !isRecord(itemValue) && !Array.isArray(itemValue)).map(([key, itemValue]) => <label key={key}><span className="mb-1 block text-xs font-bold text-[var(--sigo-muted)]">{formatFieldLabel(key)}</span><input className="sigo-input bg-white" value={resolveDisplayValue(key, itemValue, catalogs)} readOnly /></label>)}</div>) : <p className="text-sm font-semibold text-[var(--sigo-muted)]">Nenhum item registrado.</p>}</div></section>; })}</div></div><footer className="flex shrink-0 justify-end border-t border-[var(--sigo-border)] bg-white p-4"><button type="button" className="sigo-button" onClick={onClose}>Fechar</button></footer></div></div>;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"><div className="sigo-card flex max-h-[calc(100vh-4rem)] w-full max-w-3xl flex-col overflow-hidden bg-white"><header className="flex shrink-0 items-center justify-between bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4 text-white"><h2 className="text-xl font-black text-white">Ver Pedido #{getId(order) ?? ""}</h2><button type="button" className="text-2xl font-black" onClick={onClose} aria-label="Fechar">×</button></header><div className="sigo-scrollbar min-h-0 flex-1 overflow-y-auto p-4"><div className="rounded-lg border border-[var(--sigo-border)] bg-white p-4"><div className="grid gap-4 md:grid-cols-2">{fields.map(([label, value]) => <label key={label} className="rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3"><span className="mb-2 block text-xs font-bold text-[var(--sigo-muted)]">{label}</span><input className="sigo-input bg-white" value={String(value ?? "-")} readOnly /></label>)}</div>{groups.map(([label, value]) => { const items = Array.isArray(value) ? value.filter(isRecord) : []; return <section key={label} className="mt-4 overflow-hidden rounded-lg border border-[var(--sigo-border)] bg-white shadow-[var(--sigo-shadow-sm)]"><header className="border-b border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] px-4 py-3"><p className="text-sm font-black text-[var(--sigo-text)]">{label}</p></header><div className="grid gap-3 p-4">{items.length ? items.map((item, index) => <div key={`${label}-${index}`} className="grid gap-3 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4 sm:grid-cols-2">{Object.entries(item).filter(([, itemValue]) => !isRecord(itemValue) && !Array.isArray(itemValue)).map(([key, itemValue]) => <label key={key}><span className="mb-1 block text-xs font-bold text-[var(--sigo-muted)]">{formatFieldLabel(key)}</span><input className="sigo-input bg-white" value={resolveDisplayValue(key, itemValue, catalogs, item)} readOnly /></label>)}</div>) : <p className="text-sm font-semibold text-[var(--sigo-muted)]">Nenhum item registrado.</p>}</div></section>; })}</div></div><footer className="flex shrink-0 justify-end border-t border-[var(--sigo-border)] bg-white p-4"><button type="button" className="sigo-button" onClick={onClose}>Fechar</button></footer></div></div>;
 }
 
 export default function ClientePage() {
@@ -287,7 +364,7 @@ export default function ClientePage() {
   };
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={["cliente"]}>
       <div className="sigo-page sigo-client-area">
         <NavBar />
         <main className="sigo-shell grid !max-w-3xl gap-5 py-8">
@@ -309,7 +386,7 @@ export default function ClientePage() {
 
             {!showLoading && activeTab === "vehicles" ? (
               <section key="client-vehicles" className="sigo-client-tab-from-left grid w-full gap-3 p-5">
-                {vehicles.length ? vehicles.map((vehicle, index) => { const id = getId(vehicle); return <article key={id ?? index} className="w-full rounded-xl border border-[var(--sigo-border)] bg-white p-5 shadow-[var(--sigo-shadow-sm)]"><div className="flex items-start justify-between gap-4"><div><p className="text-lg font-black text-[var(--sigo-blue-deep)]">{String(getValue(vehicle, "NomeVeiculo", "Nome") ?? "Veículo")}</p><p className="mt-1 text-sm font-bold text-[var(--sigo-muted)]">{String(getValue(vehicle, "TipoVeiculo") ?? "Veículo")} · {String(getValue(vehicle, "AnoFab") ?? "-")}</p></div><span className="sigo-badge text-sm">{String(getValue(vehicle, "PlacaVeiculo") ?? "Sem placa")}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" className="sigo-button min-h-11 text-sm" onClick={() => setViewingVehicle(vehicle)}>Ver dados</button><button type="button" className="sigo-button sigo-button-primary min-h-11 text-sm" onClick={() => { setSelectedVehicleId(id); setActiveTab("history"); }}>Ver histórico</button></div></article>; }) : <p className="py-16 text-center font-bold text-[var(--sigo-muted)]">Nenhum veículo encontrado.</p>}
+                {vehicles.length ? vehicles.map((vehicle, index) => { const id = getId(vehicle); return <article key={id ?? index} className="w-full rounded-xl border border-[var(--sigo-border)] bg-white p-5 shadow-[var(--sigo-shadow-sm)]"><div className="flex items-start justify-between gap-4"><div><p className="text-lg font-black text-[var(--sigo-blue-deep)]">{String(getValue(vehicle, "NomeVeiculo", "Nome") ?? "Veículo")}</p><p className="mt-1 text-sm font-bold text-[var(--sigo-muted)]">{String(getValue(vehicle, "ModeloVeiculo", "Modelo") ?? "Modelo não informado")} · {String(getValue(vehicle, "AnoFab") ?? "-")}</p></div><span className="sigo-badge text-sm">{String(getValue(vehicle, "PlacaVeiculo") ?? "Sem placa")}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" className="sigo-button min-h-11 text-sm" onClick={() => setViewingVehicle(vehicle)}>Ver dados</button><button type="button" className="sigo-button sigo-button-primary min-h-11 text-sm" onClick={() => { setSelectedVehicleId(id); setActiveTab("history"); }}>Ver histórico</button></div></article>; }) : <p className="py-16 text-center font-bold text-[var(--sigo-muted)]">Nenhum veículo encontrado.</p>}
               </section>
             ) : null}
 

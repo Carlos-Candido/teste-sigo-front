@@ -61,11 +61,8 @@ const getTodayIso = (): string => {
   return `${year}-${month}-${day}`;
 };
 
-const getStatus = (order: Item, vehicle?: Item): string => {
-  const status = normalize(
-    getValue(order, "Status", "Situacao") ??
-      getValue(vehicle, "Status", "Situacao")
-  );
+const getStatus = (order: Item): string => {
+  const status = normalize(getValue(order, "Status", "Situacao"));
   if (["3", "concluido", "concluida", "finalizado"].includes(status)) return "Concluídas";
   if (["1", "aguardandopeca", "aguardandopecas"].includes(status)) return "Aguardando peça";
   if (["2", "emandamento", "emmanutencao"].includes(status)) return "Em andamento";
@@ -157,13 +154,7 @@ export default function AnaliseMetricasPage() {
       const date = new Date(String(getValue(order, "DataInicio", "CreatedAt") ?? ""));
       return !Number.isNaN(date.getTime()) && date >= start && date <= end;
     });
-    const resolveStatus = (order: Item) =>
-      getStatus(
-        order,
-        vehiclesById.get(
-          String(getValue(order, "idVeiculo", "VeiculoId") ?? "")
-        )
-      );
+    const resolveStatus = (order: Item) => getStatus(order);
     const statusLabels = ["Abertas", "Em andamento", "Aguardando peça", "Concluídas", "Canceladas"];
     const statuses = statusLabels.map((label) => [label, orders.filter((order) => resolveStatus(order) === label).length] as [string, number]);
     const completed = statuses.find(([label]) => label === "Concluídas")?.[1] ?? 0;
@@ -195,13 +186,14 @@ export default function AnaliseMetricasPage() {
       });
     });
 
-    const brands = new Map<string, number>();
+    const models = new Map<string, number>();
     orders.forEach((order) => {
       const vehicle = vehiclesById.get(String(getValue(order, "idVeiculo", "VeiculoId") ?? ""));
-      const brandId = String(getValue(vehicle, "IdMarca", "MarcaId") ?? "");
-      const brand = (records.marcas ?? []).find((item) => String(getValue(item, "Id")) === brandId);
-      const label = String(getValue(brand, "Nome") ?? getValue(vehicle, "Marca") ?? "Não informada");
-      brands.set(label, (brands.get(label) ?? 0) + 1);
+      const label = String(
+        getValue(vehicle, "ModeloVeiculo", "Modelo", "modeloVeiculo", "modelo") ??
+          "Não informado"
+      );
+      models.set(label, (models.get(label) ?? 0) + 1);
     });
 
     const durations = orders.map((order) => {
@@ -323,7 +315,7 @@ export default function AnaliseMetricasPage() {
     const rank = (map: Map<string, number>) => [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
     return {
       orders, statuses, completed, ongoing, revenue, vehicleCount, usedPieces,
-      services: rank(services), pieces: rank(pieces), brands: rank(brands), buckets,
+      services: rank(services), pieces: rank(pieces), models: rank(models), buckets,
       average: `${averageDays}d ${averageHours}h`,
       mechanics: [...mechanicMap.values()].sort((a, b) => b.orders - a.orders),
       monthlyDurations: [...monthlyDurationMap.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([, value]) => ({ label: value.label, value: value.total / value.count })),
@@ -364,7 +356,7 @@ export default function AnaliseMetricasPage() {
   ];
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={["oficina", "funcionario"]}>
       <div className="sigo-page">
         <NavBar />
         <main className="sigo-shell sigo-dashboard-shell sigo-management-shell grid gap-7 py-8 lg:grid-cols-[310px_minmax(0,1fr)] lg:items-start">
@@ -431,7 +423,7 @@ export default function AnaliseMetricasPage() {
                 <article className="sigo-card !rounded-none overflow-hidden"><div className="border-b border-[var(--sigo-border)] px-5 py-4"><h2 className="text-base font-black">Ordens de serviço por status</h2></div><Ranking rows={analysis.statuses} color="bg-gradient-to-r from-blue-600 to-cyan-400" /></article>
                 <article className="sigo-card !rounded-none overflow-hidden"><div className="border-b border-[var(--sigo-border)] px-5 py-4"><h2 className="text-base font-black">Serviços mais realizados</h2></div><Ranking rows={analysis.services} color="bg-gradient-to-r from-violet-600 to-fuchsia-400" /></article>
                 <article className="sigo-card !rounded-none overflow-hidden"><div className="border-b border-[var(--sigo-border)] px-5 py-4"><h2 className="text-base font-black">Peças mais utilizadas</h2></div><Ranking rows={analysis.pieces} color="bg-gradient-to-r from-amber-500 to-orange-400" /></article>
-                <article className="sigo-card !rounded-none overflow-hidden"><div className="border-b border-[var(--sigo-border)] px-5 py-4"><h2 className="text-base font-black">Veículos atendidos por marca</h2></div><Ranking rows={analysis.brands} color="bg-gradient-to-r from-emerald-600 to-teal-400" /></article>
+                <article className="sigo-card !rounded-none overflow-hidden"><div className="border-b border-[var(--sigo-border)] px-5 py-4"><h2 className="text-base font-black">Veículos atendidos por modelo</h2></div><Ranking rows={analysis.models} color="bg-gradient-to-r from-emerald-600 to-teal-400" /></article>
               </section>
 
               <section className="sigo-card !rounded-none overflow-hidden">

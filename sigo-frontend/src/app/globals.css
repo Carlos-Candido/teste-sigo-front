@@ -258,7 +258,7 @@ textarea:disabled {
   min-height: 100%;
   align-self: stretch;
   background-color: #031b3c;
-  box-shadow: var(--sigo-shadow-md);
+  box-shadow: none;
 }
 
 .sigo-dashboard-sidebar::before,
@@ -658,4 +658,264 @@ textarea:disabled {
     scroll-behavior: auto !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* Tema escuro global do SIGO */
+:root[data-theme="dark"] {
+  --background: #101318;
+  --foreground: #f5f7fb;
+  --sigo-page: #101318;
+  --sigo-surface: #181d25;
+  --sigo-surface-soft: #222934;
+  --sigo-surface-blue: #263750;
+  --sigo-border: #364152;
+  --sigo-border-strong: #53627a;
+  --sigo-text: #f5f7fb;
+  --sigo-muted: #b8c2d1;
+  --sigo-soft: #8f9bad;
+  --sigo-blue: #4c9cff;
+  --sigo-blue-dark: #347fdf;
+  --sigo-blue-deep: #2869bf;
+  --sigo-blue-soft: #233d5f;
+  --sigo-cyan: #55c7ef;
+  --sigo-success: #42d3a2;
+  --sigo-danger: #ff6875;
+  --sigo-danger-soft: #3b2027;
+  --sigo-focus: rgba(85, 199, 239, 0.32);
+  --sigo-shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.3);
+  --sigo-shadow-md: 0 18px 42px rgba(0, 0, 0, 0.38);
+  --sigo-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.48);
+}
+
+html[data-theme="dark"] {
+  background: var(--sigo-page);
+  color-scheme: dark;
+  scrollbar-color: #64748b var(--sigo-page);
+}
+
+html[data-theme="dark"] body {
+  background-color: var(--sigo-page);
+  color: var(--sigo-text);
+  scrollbar-color: #64748b var(--sigo-page);
+}
+
+html[data-theme="dark"] body::before {
+  background-image: url("/sigo-background-escuro.png");
+  opacity: 1;
+  filter: none;
+}
+
+html[data-theme="dark"] html::-webkit-scrollbar-track,
+html[data-theme="dark"] body::-webkit-scrollbar,
+html[data-theme="dark"] body::-webkit-scrollbar-track {
+  background: var(--sigo-page);
+}
+
+html[data-theme="dark"] html::-webkit-scrollbar-thumb,
+html[data-theme="dark"] body::-webkit-scrollbar-thumb {
+  border-color: var(--sigo-page);
+  background: #64748b;
+}
+
+html[data-theme="dark"] .sigo-dashboard-sidebar {
+  background-color: #15375f;
+}
+
+html[data-theme="dark"] .sigo-dashboard-sidebar::before {
+  filter: brightness(1.65) contrast(0.72);
+}
+
+html[data-theme="dark"] .sigo-dashboard-sidebar::after {
+  background: linear-gradient(180deg, rgba(19, 55, 96, 0.52), rgba(24, 68, 116, 0.58));
+}
+
+html[data-theme="dark"] .sigo-dashboard-sidebar-nav a,
+html[data-theme="dark"] .sigo-dashboard-sidebar-nav a span {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sigo-dashboard-sidebar-nav a:hover {
+  background-color: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="dark"] .sigo-dashboard-sidebar-nav a[class*="border-white"] {
+  border-color: rgba(255, 255, 255, 0.9) !important;
+  background-color: rgba(255, 255, 255, 0.17) !important;
+}
+
+html[data-theme="dark"] .sigo-card,
+html[data-theme="dark"] .sigo-card-soft,
+html[data-theme="dark"] .bg-white {
+  background-color: var(--sigo-surface) !important;
+}
+
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100,
+html[data-theme="dark"] .bg-slate-200 {
+  background-color: var(--sigo-surface-soft) !important;
+}
+
+html[data-theme="dark"] .sigo-input,
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background-color: #151a21;
+  color: var(--sigo-text);
+}
+
+html[data-theme="dark"] .sigo-table td {
+  background: var(--sigo-surface);
+}
+
+html[data-theme="dark"] .sigo-table tbody tr:hover td {
+  background: var(--sigo-surface-soft);
+}
+
+html[data-theme="dark"] .sigo-button-primary,
+html[data-theme="dark"] [class*="bg-[linear-gradient"][class*="sigo-blue"] {
+  color: var(--sigo-page) !important;
+}
+
+html[data-theme="dark"] .sigo-button-primary {
+  background: linear-gradient(135deg, var(--sigo-blue-dark), var(--sigo-blue));
+}
+
+html[data-theme="dark"] .text-white,
+html[data-theme="dark"] [class*="text-white"] {
+  color: var(--sigo-page) !important;
+}
+
+html[data-theme="dark"] .text-black,
+html[data-theme="dark"] [class*="text-slate-900"],
+html[data-theme="dark"] [class*="text-slate-800"] {
+  color: var(--sigo-text) !important;
+}
+
+html[data-theme="dark"] .text-red-400,
+html[data-theme="dark"] .text-red-500,
+html[data-theme="dark"] .text-red-600,
+html[data-theme="dark"] [class*="text-red-"] {
+  color: #ff6875 !important;
+}
+
+html[data-theme="dark"] .text-emerald-600,
+html[data-theme="dark"] .text-emerald-700,
+html[data-theme="dark"] [class*="text-emerald-"] {
+  color: #42d3a2 !important;
+}
+
+html[data-theme="dark"] option {
+  background: #151a21;
+  color: var(--sigo-text);
+}
+
+html[data-theme="dark"] footer {
+  border-color: #29425c;
+}
+.sigo-theme-toggle-thumb {
+  background: #f8fafc !important;
+}
+
+html[data-theme="dark"] body .sigo-theme-toggle-thumb {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* Tons coloridos escuros para os painéis de dashboard e análise */
+html[data-theme="dark"] .bg-emerald-50,
+html[data-theme="dark"] .bg-green-50 {
+  background-color: #0d352a !important;
+}
+
+html[data-theme="dark"] .bg-blue-50 {
+  background-color: #142f55 !important;
+}
+
+html[data-theme="dark"] .bg-violet-50,
+html[data-theme="dark"] .bg-purple-50 {
+  background-color: #302052 !important;
+}
+
+html[data-theme="dark"] .bg-amber-50,
+html[data-theme="dark"] .bg-yellow-50 {
+  background-color: #45330d !important;
+}
+
+html[data-theme="dark"] .bg-orange-50 {
+  background-color: #47270f !important;
+}
+
+html[data-theme="dark"] .bg-red-50,
+html[data-theme="dark"] .bg-rose-50 {
+  background-color: #482027 !important;
+}
+
+html[data-theme="dark"] .border-emerald-200,
+html[data-theme="dark"] .border-green-200 { border-color: #26785f !important; }
+html[data-theme="dark"] .border-blue-200 { border-color: #376ca8 !important; }
+html[data-theme="dark"] .border-violet-200,
+html[data-theme="dark"] .border-purple-200 { border-color: #7450a8 !important; }
+html[data-theme="dark"] .border-amber-200,
+html[data-theme="dark"] .border-yellow-200 { border-color: #987220 !important; }
+html[data-theme="dark"] .border-orange-200 { border-color: #a35c25 !important; }
+html[data-theme="dark"] .border-red-200,
+html[data-theme="dark"] .border-rose-200 { border-color: #a44858 !important; }
+
+html[data-theme="dark"] [class*="text-blue-7"],
+html[data-theme="dark"] [class*="text-blue-8"] { color: #88bfff !important; }
+html[data-theme="dark"] [class*="text-violet-7"],
+html[data-theme="dark"] [class*="text-violet-8"],
+html[data-theme="dark"] [class*="text-purple-7"],
+html[data-theme="dark"] [class*="text-purple-8"] { color: #c4a5ff !important; }
+html[data-theme="dark"] [class*="text-amber-7"],
+html[data-theme="dark"] [class*="text-amber-8"],
+html[data-theme="dark"] [class*="text-yellow-7"],
+html[data-theme="dark"] [class*="text-yellow-8"] { color: #f4ca62 !important; }
+html[data-theme="dark"] [class*="text-orange-7"],
+html[data-theme="dark"] [class*="text-orange-8"] { color: #ffab67 !important; }
+html[data-theme="dark"] [class*="text-rose-7"],
+html[data-theme="dark"] [class*="text-rose-8"] { color: #ff8fa1 !important; }
+html[data-theme="dark"] header.sticky,
+html[data-theme="dark"] header.sticky .text-blue-50,
+html[data-theme="dark"] header.sticky .text-blue-100,
+html[data-theme="dark"] header.sticky [class*="text-white"] {
+  color: var(--sigo-page) !important;
+}
+
+html[data-theme="dark"] header.sticky .sigo-logout-button {
+  color: #ff0000 !important;
+}
+
+html[data-theme="dark"] header.sticky .sigo-logout-button:hover {
+  color: #e00000 !important;
+  background-color: rgba(255, 0, 0, 0.12) !important;
+}
+.sigo-theme-icon {
+  filter: brightness(0) invert(1);
+}
+
+html[data-theme="dark"] header.sticky .sigo-navbar-title {
+  color: #ffffff !important;
+}
+html[data-theme="dark"] header.sticky .sigo-navbar-greeting {
+  color: #ffffff !important;
+}
+html[data-theme="dark"] img[src="/mais.png"] {
+  filter: brightness(0) !important;
+}
+img.sigo-record-add-icon {
+  filter: brightness(0) saturate(100%) invert(42%) sepia(96%) saturate(1700%) hue-rotate(194deg) brightness(105%) contrast(101%) !important;
+}
+html[data-theme="dark"] body button.sigo-modal-create-button {
+  color: #000000 !important;
+}
+html[data-theme="dark"] header.sticky .sigo-navbar-profile {
+  color: #ffffff !important;
+}
+html[data-theme="dark"] img[src="/mais.png"].sigo-record-add-icon {
+  filter: brightness(0) saturate(100%) invert(42%) sepia(96%) saturate(1700%) hue-rotate(194deg) brightness(105%) contrast(101%) !important;
+}
+html body .sigo-public-hero-title,
+html[data-theme="dark"] body .sigo-public-hero-title {
+  color: #ffffff !important;
 }

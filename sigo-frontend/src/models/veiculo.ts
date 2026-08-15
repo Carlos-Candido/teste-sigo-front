@@ -1,7 +1,7 @@
 export default interface Veiculo {
   Id: number;
   NomeVeiculo: string;
-  TipoVeiculo: string;
+  ModeloVeiculo: string;
   PlacaVeiculo: string;
   ChassiVeiculo: string;
   AnoFab: number;
@@ -10,5 +10,4 @@ export default interface Veiculo {
   Seguro: string;
   Cor: string;
   ClienteId: number;
-  Situacao: number;
 }

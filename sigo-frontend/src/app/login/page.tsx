@@ -25,6 +25,7 @@ export default function LoginPage() {
   const { login, userRole } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [accountType, setAccountType] = useState<"cliente" | "funcionario" | "oficina">("funcionario");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,7 +34,7 @@ export default function LoginPage() {
     setError(null);
     setIsLoading(true);
 
-    const result = await login({ email: identifier, password });
+    const result = await login({ email: identifier, password, accountType });
     if (result.ok) {
       router.replace(
         userRole.toLowerCase() === "cliente" ? routes.clientHome : routes.dashboard
@@ -60,7 +61,7 @@ export default function LoginPage() {
                   className="h-full w-full object-contain"
                 />
               </div>
-              <p className="mt-4 text-lg font-bold text-white">
+              <p className="sigo-public-hero-title mt-4 text-lg font-bold text-white">
                 Oficina, clientes e serviços em um só painel
               </p>
               <p className="mt-4 max-w-lg text-base leading-7 text-blue-50">
@@ -101,6 +102,14 @@ export default function LoginPage() {
           </div>
 
           <form className="grid gap-5 p-6" onSubmit={handleSubmit}>
+            <label className="grid gap-2 text-sm font-bold text-[var(--sigo-muted)]">
+              Tipo de acesso
+              <select className="sigo-input bg-white" value={accountType} onChange={(event) => setAccountType(event.target.value as typeof accountType)}>
+                <option value="funcionario">Funcionário</option>
+                <option value="oficina">Oficina</option>
+                <option value="cliente">Cliente</option>
+              </select>
+            </label>
             <TextInput
               label="CPF, CNPJ ou E-mail"
               value={identifier}

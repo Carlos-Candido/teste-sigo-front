@@ -11,8 +11,11 @@ const defaultBaseUrl =
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-const customerLoginRoutes = ["/api/v1/clientes/login"];
-const staffLoginRoutes = ["/api/v1/oficinas/login", "/api/v1/funcionarios/login"];
+const loginRouteByAccount = {
+  cliente: "/api/v1/clientes/login",
+  funcionario: "/api/v1/funcionarios/login",
+  oficina: "/api/v1/oficinas/login",
+} as const;
 
 const sanitizeToken = (value: string): string =>
   value.trim().replace(/^Bearer\s+/i, "").replace(/^"|"$/g, "");
@@ -199,8 +202,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (payload: AuthLoginPayload): Promise<ApiResult> => {
     const normalizedIdentifier = payload.email.trim();
-    const isEmailIdentifier = normalizedIdentifier.includes("@");
-    const loginRoutes = isEmailIdentifier ? staffLoginRoutes : customerLoginRoutes;
+    const accountType = payload.accountType ?? (normalizedIdentifier.includes("@") ? "funcionario" : "cliente");
+    const loginRoutes = [loginRouteByAccount[accountType]];
     let lastResult: ApiResult | null = null;
 
     for (const route of loginRoutes) {
@@ -266,7 +269,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
-  const logout = () => setToken("");
+  const logout = () => {
+    setToken("");
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.replace("/login");
+    }
+  };
   const userName = useMemo(() => getFirstNameFromToken(token), [token]);
   const fullName = useMemo(() => getFullNameFromToken(token), [token]);
   const userEmail = useMemo(() => getEmailFromToken(token), [token]);

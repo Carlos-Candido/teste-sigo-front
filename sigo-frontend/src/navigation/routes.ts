@@ -5,6 +5,7 @@ export const routes = {
   profile: "/perfil",
   management: "/dashboard/gerencia",
   analytics: "/dashboard/analise-metricas",
+  audit: "/dashboard/auditoria",
   register: "/cadastro",
   registerCliente: "/cadastro/cliente",
   registerOficina: "/cadastro/oficina",

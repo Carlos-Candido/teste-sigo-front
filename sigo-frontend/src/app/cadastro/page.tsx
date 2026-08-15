@@ -498,7 +498,7 @@ export default function CadastroPage() {
               <p className="text-sm font-bold uppercase tracking-[0.12em] text-blue-100">
                 Novo cadastro
               </p>
-              <h1 className="mt-3 text-3xl font-black leading-tight text-white lg:text-4xl">
+              <h1 className="sigo-public-hero-title mt-3 text-3xl font-black leading-tight text-white lg:text-4xl">
                 Entre para o SIGO
               </h1>
               <p className="mt-4 max-w-md text-sm leading-6 text-blue-50 lg:text-base lg:leading-7">

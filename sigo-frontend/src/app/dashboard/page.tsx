@@ -61,11 +61,8 @@ const normalizeText = (value: unknown): string =>
     .replace(/[^a-zA-Z0-9]/g, "")
     .toLowerCase();
 
-const resolveOrderStatus = (
-  order: RecordItem,
-  vehicle?: RecordItem
-): OrderStatus => {
-  const raw = getValue(order, "Status", "Situacao") ?? getValue(vehicle, "Status");
+const resolveOrderStatus = (order: RecordItem): OrderStatus => {
+  const raw = getValue(order, "Status", "Situacao");
   const normalized = normalizeText(raw);
 
   if (["0", "pendente", "aguardando", "aguardandoaprovacao", "aprovacaopendente"].includes(normalized)) {
@@ -180,7 +177,7 @@ export default function DashboardPage() {
           order,
           vehicle,
           client: clientById.get(clientId),
-          status: resolveOrderStatus(order, vehicle),
+          status: resolveOrderStatus(order),
         };
       }),
     [allOrders, clientById, vehicleById]
@@ -241,7 +238,7 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={["oficina", "funcionario"]}>
       <div className="sigo-page">
         <NavBar />
         <main className="sigo-shell sigo-dashboard-shell sigo-management-shell grid gap-7 py-8 lg:grid-cols-[310px_minmax(0,1fr)] lg:items-start">

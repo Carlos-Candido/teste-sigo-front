@@ -71,7 +71,14 @@ const getRecordValue = (record: FormValue, key: string): unknown => {
   const matchedKey = Object.keys(record).find(
     (candidate) => normalizeFieldKey(candidate) === normalized
   );
-  return matchedKey ? record[matchedKey] : undefined;
+  if (matchedKey) return record[matchedKey];
+  const aliases: Record<string, string[]> = {
+    datanasc: ["datanascimento", "nascimento"],
+  };
+  const aliasKey = Object.keys(record).find((candidate) =>
+    (aliases[normalized] ?? []).includes(normalizeFieldKey(candidate))
+  );
+  return aliasKey ? record[aliasKey] : undefined;
 };
 
 const getRecordId = (record: FormValue): number | null => {
@@ -104,6 +111,20 @@ const extractRecord = (data: unknown): FormValue | null => {
   return extractList(data)[0] ?? null;
 };
 
+const getApiErrorMessage = (data: unknown, fallback: string): string => {
+  if (typeof data === "string" && data.trim()) return data;
+  if (!isPlainObject(data)) return fallback;
+  const errors = data.errors ?? data.Errors;
+  if (isPlainObject(errors)) {
+    const messages = Object.values(errors).flatMap((value) =>
+      Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : typeof value === "string" ? [value] : []
+    );
+    if (messages.length) return messages.join(" | ");
+  }
+  const message = data.Message ?? data.message ?? data.detail ?? data.title;
+  return typeof message === "string" && message.trim() ? message : fallback;
+};
+
 const mergeWithTemplate = (template: unknown, value: unknown): unknown => {
   if (Array.isArray(template)) {
     const itemTemplate = template[0];
@@ -125,6 +146,13 @@ const mergeWithTemplate = (template: unknown, value: unknown): unknown => {
     return result;
   }
 
+  if (
+    typeof template === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(template) &&
+    typeof value === "string"
+  ) {
+    return value.slice(0, 10);
+  }
   return value ?? template;
 };
 
@@ -277,6 +305,7 @@ export default function PerfilPage() {
     500
   );
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [lastCepLookup, setLastCepLookup] = useState("");
 
   const authHeaders = useMemo(
@@ -337,9 +366,14 @@ export default function PerfilPage() {
       }
 
       setProfileId(nextProfileId ?? getRecordId(record));
-      setFormData(
-        clearPasswordValues(mergeWithTemplate(config.template, record) as FormValue)
+      const mergedProfile = clearPasswordValues(
+        mergeWithTemplate(config.template, record) as FormValue
       );
+      const birthDate = getRecordValue(record, "DataNasc");
+      if (typeof birthDate === "string" && birthDate) {
+        mergedProfile.DataNasc = birthDate.slice(0, 10);
+      }
+      setFormData(mergedProfile);
       setIsLoading(false);
     };
 
@@ -496,6 +530,21 @@ export default function PerfilPage() {
 
   const handleUpdate = async () => {
     if (!config?.updatePath || !profileId) return;
+    const email = String(getRecordValue(formData, "Email") ?? "").trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Informe um e-mail válido.");
+      return;
+    }
+    const birthDate = String(getRecordValue(formData, "DataNasc") ?? "").slice(0, 10);
+    if (normalizedRole === "cliente" && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      setError("Informe uma data de nascimento válida.");
+      return;
+    }
+    const cep = onlyDigits(getRecordValue(formData, "Cep"));
+    if (Object.keys(formData).some((key) => normalizeFieldKey(key) === "cep") && cep.length !== 8) {
+      setError("Informe um CEP válido com 8 dígitos.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -506,7 +555,7 @@ export default function PerfilPage() {
     });
 
     if (!result.ok) {
-      setError("Falha ao atualizar sua conta.");
+      setError(getApiErrorMessage(result.data, "Falha ao atualizar sua conta."));
       setIsLoading(false);
       return;
     }
@@ -517,8 +566,7 @@ export default function PerfilPage() {
 
   const handleDelete = async () => {
     if (!config?.deletePath || !profileId) return;
-    if (!window.confirm("Deseja realmente deletar sua conta?")) return;
-
+    setConfirmDelete(false);
     setIsLoading(true);
     setError(null);
     const result = await fetchJson(baseUrl, config.deletePath(String(profileId)), {
@@ -527,7 +575,7 @@ export default function PerfilPage() {
     });
 
     if (!result.ok) {
-      setError("Falha ao deletar sua conta.");
+      setError(getApiErrorMessage(result.data, "Falha ao deletar sua conta."));
       setIsLoading(false);
       return;
     }
@@ -734,7 +782,7 @@ export default function PerfilPage() {
                 <button
                   type="button"
                   className="sigo-button sigo-button-danger bg-white"
-                  onClick={handleDelete}
+                  onClick={() => setConfirmDelete(true)}
                   disabled={isLoading || !config?.deletePath || !profileId}
                 >
                   Deletar minha conta
@@ -787,6 +835,15 @@ export default function PerfilPage() {
           </section>
           </div>
         </main>
+        {confirmDelete ? (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4">
+            <div className="sigo-card w-full max-w-md overflow-hidden bg-white">
+              <header className="bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4"><h2 className="text-lg font-black text-white">Confirmar exclusão</h2></header>
+              <p className="p-5 text-sm font-semibold text-[var(--sigo-text)]">Deseja realmente deletar sua conta? Esta ação não poderá ser desfeita.</p>
+              <footer className="flex justify-end gap-3 border-t border-[var(--sigo-border)] p-4"><button type="button" className="sigo-button" onClick={() => setConfirmDelete(false)}>Cancelar</button><button type="button" className="sigo-button !border-red-600 !bg-red-600 !text-white" onClick={() => void handleDelete()}>Excluir conta</button></footer>
+            </div>
+          </div>
+        ) : null}
       </div>
     </ProtectedRoute>
   );

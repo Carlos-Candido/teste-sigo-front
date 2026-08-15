@@ -5,7 +5,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useMinimumLoading } from "@/hooks/useMinimumLoading";
 import { fetchJson } from "@/lib/api";
 import { fetchCepAddress } from "@/lib/cep";
-import { fetchAllDashboardRecords } from "@/lib/dashboardData";
 import type { CrudConfig } from "@/components/CrudPanel";
 import { entityConfigs } from "@/models/entityConfigs";
 import {
@@ -44,6 +43,7 @@ import {
 
 type FormMode = "create" | "edit" | "view";
 type DiscountType = "percent" | "money";
+type ManagementFilter = { key: string; label: string; type?: "text" | "number" | "date" | "select"; fields?: string[]; options?: SelectOption[]; };
 type FormValue = Record<string, unknown>;
 type BuildPayloadOptions = {
   includeArrays?: boolean;
@@ -59,6 +59,7 @@ type SavedImagePreview = {
   url: string;
 };
 
+
 const managementKeys = [
   "clientes",
   "funcionarios",
@@ -70,6 +71,16 @@ const managementKeys = [
 ];
 
 const PAGE_SIZE = 10;
+const activeStatusOptions: SelectOption[] = [{ value: 1, label: "Ativo" }, { value: 0, label: "Inativo" }];
+const managementFiltersByEntity: Record<string, ManagementFilter[]> = {
+  clientes: [{ key: "id", label: "ID", type: "number", fields: ["Id"] }, { key: "name", label: "Nome", fields: ["Nome"] }, { key: "cpf", label: "CPF", fields: ["Cpf_Cnpj", "Cpf"] }, { key: "phone", label: "Telefone" }, { key: "email", label: "E-mail", fields: ["Email"] }, { key: "situation", label: "Status", type: "select", options: activeStatusOptions }],
+  veiculos: [{ key: "id", label: "ID", type: "number", fields: ["Id"] }, { key: "plate", label: "Placa", fields: ["PlacaVeiculo"] }, { key: "model", label: "Modelo", fields: ["ModeloVeiculo"] }, { key: "owner", label: "Cliente" }, { key: "year", label: "Ano", type: "number", fields: ["AnoFab"] }, { key: "chassis", label: "Chassi", fields: ["ChassiVeiculo"] }],
+  funcionarios: [{ key: "id", label: "ID", type: "number", fields: ["Id"] }, { key: "name", label: "Nome", fields: ["Nome"] }, { key: "cpf", label: "CPF", fields: ["Cpf"] }, { key: "role", label: "Cargo", fields: ["Cargo"] }, { key: "situation", label: "Status", type: "select", options: activeStatusOptions }],
+  marcas: [{ key: "id", label: "ID", type: "number", fields: ["Id"] }, { key: "name", label: "Nome", fields: ["Nome"] }, { key: "brandType", label: "Tipo", fields: ["TipoMarca"] }],
+  servicos: [{ key: "id", label: "ID", type: "number", fields: ["Id"] }, { key: "name", label: "Nome", fields: ["Nome"] }, { key: "serviceEmployee", label: "Funcionário" }],
+  pecas: [{ key: "id", label: "ID", type: "number", fields: ["Id"] }, { key: "name", label: "Nome", fields: ["Nome"] }, { key: "ean", label: "EAN", fields: ["EAN"] }, { key: "brand", label: "Marca" }, { key: "stock", label: "Estoque", type: "select", options: [{ value: "with", label: "Com estoque" }, { value: "without", label: "Sem estoque" }] }, { key: "situation", label: "Status", type: "select", options: activeStatusOptions }],
+  pedidos: [{ key: "id", label: "ID", type: "number", fields: ["Id"] }, { key: "client", label: "Cliente" }, { key: "vehicle", label: "Veículo" }, { key: "employee", label: "Funcionário" }, { key: "orderStatus", label: "Status", type: "select", options: [{ value: 0, label: "Pendente" }, { value: 1, label: "Aguardando peças" }, { value: 2, label: "Em andamento" }, { value: 3, label: "Concluído" }] }, { key: "startDate", label: "Data inicial", type: "date" }, { key: "endDate", label: "Data de fechamento", type: "date" }, { key: "value", label: "Valor", type: "number" }],
+};
 
 const normalizeVehicleStatus = (value: unknown): number => {
   const numericValue = Number(value);
@@ -98,6 +109,7 @@ const parentIdFieldByList: Record<string, string> = {
 
 const hiddenFieldByList: Record<string, string[]> = {
   telefones: ["DDD"],
+  pedidopecas: ["ValorUnitario"],
 };
 
 const partConditionOptions: SelectOption[] = [
@@ -115,50 +127,119 @@ const workflowStatusOptions: SelectOption[] = [
 ];
 
 const editableOptionsByField: Record<string, string[]> = {
-  tipoveiculo: [
-    "Automóvel", "Motocicleta", "Caminhonete", "Picape", "Van", "Furgão",
-    "Caminhão", "Ônibus", "Trator", "Máquina agrícola", "Outro",
+  modeloveiculo: [
+    "KA", "FOCUS", "GOL", "CORSA", "HB20", "FIESTA", "ONIX", "MONZA",
+    "UNO", "VECTRA", "SAVEIRO", "F1000", "MERIVA", "CELTA", "S10", "POLO",
+    "PALIO", "COROLLA", "PARATI", "ASTRA", "SPACEFOX", "FOX", "MONTANA",
+    "ECOSPORT", "STRADA", "CLASSIC", "KADETT", "D20", "DEL REY", "FIORINO",
+    "CORCEL", "PRISMA", "KOMBI", "KWID", "VIRTUS", "COURIER", "CHEVETTE",
+    "GOLF", "FUSCA", "TORO", "RANGER", "D10", "ETIOS", "APOLLO", "TRITON",
+    "DUCATO", "IDEA", "LOGUS", "DOBLO", "VOYAGE", "SANTANA", "PASSAT", "JETTA",
+    "T-CROSS", "NIVUS", "TAOS", "TIGUAN", "AMAROK", "BRASILIA", "VARIANT", "UP",
+    "BORA", "QUANTUM", "POINTER", "VERSAILLES", "ROYALE", "PAMPA", "ESCORT",
+    "VERONA", "FUSION", "EDGE", "TERRITORY", "MAVERICK", "MUSTANG", "BELINA",
+    "CORCEL II", "DEL REY BELINA", "VERANEIO", "OPALA", "CARAVAN", "OMEGA",
+    "SUPREMA", "ZAFIRA", "CRUZE", "SPIN", "TRACKER", "EQUINOX", "TRAILBLAZER",
+    "BLAZER", "IPANEMA", "AGILE", "SONIC", "COBALT", "CAPTIVA", "BONANZA",
+    "A10", "A20", "C10", "C20", "ARGO", "CRONOS", "PUNTO", "BRAVO", "STILO",
+    "GRAND SIENA", "MOBI", "PULSE", "FASTBACK", "TEMPRA", "TIPO", "MAREA",
+    "MAREA WEEKEND", "SIENA", "ELBA", "PREMIO", "147", "OGGI", "PANORAMA",
+    "LINEA", "FREEMONT", "CITY", "CIVIC", "FIT", "HR-V", "WR-V", "CR-V",
+    "ACCORD", "YARIS", "HILUX", "SW4", "RAV4", "CAMRY", "PRIUS", "BANDEIRANTE",
+    "CRETA", "TUCSON", "SANTA FE", "AZERA", "ELANTRA", "I30", "VELOSTER",
+    "SANDERO", "LOGAN", "DUSTER", "CAPTUR", "CLIO", "MEGANE", "FLUENCE",
+    "KARDIAN", "OROCH", "SCENIC", "SYMBOL", "MARCH", "VERSA", "SENTRA",
+    "KICKS", "FRONTIER", "LIVINA", "PAJERO", "LANCER", "OUTLANDER", "ASX",
   ],
   combustivel: [
-    "Gasolina", "Etanol", "Flex (Gasolina/Etanol)", "Diesel", "Diesel S-10",
-    "Diesel S-500", "GNV", "GLP", "Biodiesel", "Biometano", "Hidrogênio",
-    "Elétrico", "Híbrido", "Outro",
+    "GASOLINA", "ETANOL", "FLEX (GASOLINA/ETANOL)", "DIESEL", "DIESEL S-10",
+    "DIESEL S-500", "GNV", "GLP", "Biodiesel", "Biometano", "Hidrogênio",
+    "ELÉTRICO", "HÍBRIDO", "OUTRO",
   ],
   cor: [
-    "Branco", "Preto", "Prata", "Cinza", "Vermelho", "Azul", "Verde",
-    "Amarelo", "Laranja", "Marrom", "Bege", "Dourado", "Roxo", "Rosa", "Vinho",
+    "BRANCO", "PRETO", "PRATA", "CINZA", "VERMELHO", "AZUL", "VERDE",
+    "AMARELO", "LARANJA", "MARROM", "BEGE", "DOURADO", "ROXO", "ROSA", "VINHO", "CINZA ESCURO", "CINZA CLARO", "AZUL ESCURO", "AZUL CLARO", "VERDE ESCURO",
   ],
   cargo: [
-    "Administrador", "Gerente", "Supervisor", "Mecânico", "Eletricista",
-    "Funileiro", "Pintor", "Borracheiro", "Consultor de Serviços",
-    "Recepcionista", "Estoquista", "Vendedor de Peças", "Auxiliar de Mecânico",
-    "Auxiliar Administrativo",
+    "ADMINISTRADOR", "GERENTE", "SUPERVISOR", "MECÂNICO", "ELETRICISTA",
+    "FUNILEIRO", "PINTOR", "BORRACHEIRO", "CONSULTOR DE SERVIÇOS",
+    "RECEPCIONISTA", "ESTOQUISTA", "VENDEDOR DE PEÇAS", "AUXILIAR DE MECÂNICO",
+    "AUXILIAR ADMINISTRATIVO", "AUXILIAR DE SERVIÇOS", "OUTROS",
   ],
   tipomarca: [
-    "Marca de veículo", "Marca de peça", "Marca de pneu", "Marca de lubrificante",
-    "Marca de bateria", "Marca de ferramenta", "Marca de equipamento",
-    "Marca de acessório", "Outros",
+    "MARCA DE VEÍCULO", "MARCA DE PEÇA", "MARCA DE PNEU", "MARCA DE LUBRIFICANTE",
+    "MARCA DE BATERIA", "MARCA DE FERRAMENTA", "MARCA DE EQUIPAMENTO",
+    "MARCA DE ACESSÓRIO", "OUTROS",
   ],
-  tipopeca: [
-    "Amortecedor", "Bateria", "Bico injetor", "Bobina de ignição", "Bomba d'água",
-    "Bomba de combustível", "Bomba de óleo", "Bucha", "Cabo de vela",
-    "Caixa de direção", "Catalisador", "Cilindro mestre", "Correia dentada",
-    "Correia de acessórios", "Disco de embreagem", "Disco de freio", "Filtro de ar",
-    "Filtro de combustível", "Filtro de óleo", "Filtro de cabine", "Junta do cabeçote",
-    "Junta homocinética", "Lâmpada", "Mangueira", "Motor de partida",
-    "Pastilha de freio", "Pivô", "Platô de embreagem", "Radiador",
-    "Rolamento de roda", "Sensor de rotação", "Sensor de temperatura", "Sonda lambda",
-    "Tambor de freio", "Terminal de direção", "Válvula termostática",
-    "Vela de ignição", "Palheta do limpador", "Pneu",
-  ],
+  fornecedor: [],
+
 };
 
-const getEditableFieldOptions = (entityKey: string, key: string): string[] | null => {
+const normalizeOptionText = (value: unknown): string =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+const mergeEditableOptions = (base: string[], remote: string[]): string[] => {
+  const seen = new Set<string>();
+  return [...base, ...remote]
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => {
+      const normalized = normalizeOptionText(value);
+      if (!normalized || seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+};
+
+const getEditableFieldOptions = (
+  entityKey: string,
+  key: string,
+  registrationOptions: Record<string, string[]> = {}
+): string[] | null => {
+  void entityKey;
   const normalized = normalizeFieldKey(key);
-  if (entityKey === "pecas" && normalized === "tipo") {
-    return editableOptionsByField.tipopeca;
-  }
-  return editableOptionsByField[normalized] ?? null;
+  const isEditableField =
+    Object.prototype.hasOwnProperty.call(editableOptionsByField, normalized) ||
+    Object.prototype.hasOwnProperty.call(registrationOptions, normalized);
+  if (!isEditableField) return null;
+  const base = editableOptionsByField[normalized] ?? [];
+  const remote = registrationOptions[normalized] ?? [];
+  return mergeEditableOptions(base, remote);
+};
+
+const extractRegistrationOptions = (payload: unknown): Record<string, string[]> => {
+  if (!isPlainObject(payload)) return {};
+  const envelope = isPlainObject(payload.data)
+    ? payload.data
+    : isPlainObject(payload.Data)
+      ? payload.Data
+      : payload;
+  const mapping: Record<string, string[]> = {
+    modeloveiculo: ["ModelosVeiculo", "modelosVeiculo"],
+    combustivel: ["Combustiveis", "combustiveis"],
+    cor: ["Cores", "cores"],
+    cargo: ["Cargos", "cargos"],
+    tipomarca: ["TiposMarca", "tiposMarca"],
+    fornecedor: ["Fornecedores", "fornecedores"],
+  };
+
+  return Object.fromEntries(
+    Object.entries(mapping).map(([field, aliases]) => {
+      const values = aliases
+        .map((alias) => getRecordValue(envelope, alias))
+        .find(Array.isArray);
+      return [
+        field,
+        Array.isArray(values)
+          ? mergeEditableOptions([], values.map((value) => String(value ?? "")))
+          : [],
+      ];
+    })
+  );
 };
 
 const normalizeSpecialTextField = (key: string, value: string): string => {
@@ -170,14 +251,14 @@ const normalizeSpecialTextField = (key: string, value: string): string => {
     return value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "").slice(0, 17);
   }
   if (normalized === "seguro") {
-    return value.replace(/[^A-Za-z0-9./-]/g, "").slice(0, 30);
+    return onlyDigits(value).slice(0, 100);
   }
   return value;
 };
 
+
 const hiddenFieldByEntity: Record<string, string[]> = {
   clientes: ["senha"],
-  funcionarios: ["senha"],
   pecas: ["quantidadeestoque"],
 };
 
@@ -241,8 +322,84 @@ const getVehicleValidationError = (data: FormValue): string | null => {
   if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(chassis)) {
     return "O chassi deve ter exatamente 17 letras maiúsculas e números, sem I, O ou Q.";
   }
-  if (!/^[A-Za-z0-9./-]{5,30}$/.test(insurance)) {
-    return "O seguro deve ter entre 5 e 30 caracteres: letras, números, ponto, barra ou hífen.";
+  if (insurance && !/^\d{1,100}$/.test(insurance)) {
+    return "O N° do seguro deve conter somente números.";
+  }
+  return null;
+};
+
+const getFormValidationError = (
+  entityKey: string,
+  data: FormValue,
+  mode: FormMode
+): string | null => {
+  const text = (key: string) => String(getRecordValue(data, key) ?? "").trim();
+  const firstText = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = text(key);
+      if (value) return value;
+    }
+    return "";
+  };
+  const positiveId = (key: string) => Number(getRecordValue(data, key)) > 0;
+  const requiredTextByEntity: Record<string, string[]> = {
+    clientes: ["Nome", "Email", "DataNasc"],
+    funcionarios: ["Nome", "Cpf", "Cargo", "Email"],
+    marcas: ["Nome", "TipoMarca"],
+    servicos: ["Nome"],
+    pecas: ["Nome", "EAN"],
+    veiculos: ["NomeVeiculo", "ModeloVeiculo", "PlacaVeiculo", "ChassiVeiculo", "Combustivel", "Cor"],
+  };
+  for (const key of requiredTextByEntity[entityKey] ?? []) {
+    if (!text(key)) return `Preencha o campo ${formatFieldLabel(key)}.`;
+  }
+  if (entityKey === "clientes" && !firstText("Cpf_Cnpj", "CpfCnpj", "Cpf")) {
+    return "Preencha o campo CPF.";
+  }
+  const cepKey = Object.keys(data).find((key) => normalizeFieldKey(key) === "cep");
+  if (cepKey && onlyDigits(data[cepKey]).length !== 8) {
+    return "Informe um CEP válido com 8 dígitos.";
+  }
+
+  if (entityKey === "funcionarios" && mode === "create" && !text("Senha")) {
+    return "Informe a senha inicial do funcionário.";
+  }
+  if (entityKey === "funcionarios" && text("Senha") && text("Senha").length < 6) {
+    return "A senha deve ter pelo menos 6 caracteres.";
+  }
+  if (["clientes", "funcionarios"].includes(entityKey)) {
+    const cpf = onlyDigits(
+      entityKey === "clientes"
+        ? firstText("Cpf_Cnpj", "CpfCnpj", "Cpf")
+        : getRecordValue(data, "Cpf")
+    );
+    if (cpf.length !== 11) return "Informe um CPF válido com 11 dígitos.";
+    const email = text("Email");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Informe um e-mail válido.";
+  }
+  if (entityKey === "veiculos" && !positiveId("ClienteId")) {
+    return "Selecione o cliente do veículo.";
+  }
+  if (entityKey === "pedidos") {
+    for (const [key, label] of [["idCliente", "cliente"], ["idFuncionario", "funcionário"], ["idVeiculo", "veículo"]] as const) {
+      if (!positiveId(key)) return `Selecione o ${label} do pedido.`;
+    }
+    const start = text("DataInicio").slice(0, 10);
+    const end = text("DataFim").slice(0, 10);
+    if (!start || !end) return "Informe as datas de início e término do pedido.";
+    if (end < start) return "A data de término não pode ser anterior à data de início.";
+    const pieceLines = getRecordValue(data, "Pedido_Pecas");
+    for (const line of Array.isArray(pieceLines) ? pieceLines : []) {
+      if (!isPlainObject(line)) continue;
+      if (Number(getRecordValue(line, "Quantidade")) <= 0) return "A quantidade de cada peça deve ser maior que zero.";
+      if (Number(getRecordValue(line, "ValorUnitario")) < 0) return "O valor unitário da peça não pode ser negativo.";
+    }
+  }
+  if (["servicos", "pecas"].includes(entityKey) && Number(getRecordValue(data, "Valor")) < 0) {
+    return "O valor não pode ser negativo.";
+  }
+  if (entityKey === "pecas" && ![8, 13].includes(onlyDigits(getRecordValue(data, "EAN")).length)) {
+    return "O EAN deve conter exatamente 8 ou 13 dígitos.";
   }
   return null;
 };
@@ -252,6 +409,7 @@ const fieldLabels: Record<string, string> = {
   nome: "Nome",
   email: "Email",
   senha: "Senha",
+  valorunitario: "Valor unitário",
   cpf: "CPF",
   cnpj: "CNPJ",
   cpfcnpj: "CPF",
@@ -281,6 +439,7 @@ const fieldLabels: Record<string, string> = {
   idservico: "Serviço",
   tempodec: "Tempo decimal",
   tipo: "Tipo",
+  ean: "EAN",
   quantidade: "Quantidade",
   unidade: "Unidade",
   idmarca: "Marca",
@@ -307,13 +466,13 @@ const fieldLabels: Record<string, string> = {
   quantvezes: "Quantidade de vezes",
   datainstalacao: "Data de instalação",
   nomeveiculo: "Nome do veículo",
-  tipoveiculo: "Tipo do veículo",
+  modeloveiculo: "Modelo",
   placaveiculo: "Placa",
   chassisveiculo: "Chassi",
   anofab: "Ano de fabricação",
   quilometragem: "Quilometragem",
   combustivel: "Combustível",
-  seguro: "Seguro",
+  seguro: "N° do seguro",
   cor: "Cor",
   clienteid: "Cliente",
 };
@@ -407,6 +566,13 @@ const mergeWithTemplate = (template: unknown, value: unknown): unknown => {
     return result;
   }
 
+  if (
+    typeof template === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(template) &&
+    typeof value === "string"
+  ) {
+    return value.slice(0, 10);
+  }
   return value ?? template;
 };
 
@@ -455,6 +621,13 @@ const buildPayload = (
       }
 
       const normalizedKey = normalizeFieldKey(key);
+      if (
+        options.formMode === "edit" &&
+        normalizedKey === "senha" &&
+        !String(getRecordValue(recordValue, key) ?? "").trim()
+      ) {
+        return;
+      }
       const payloadValue =
         normalizedKey === "pais"
           ? "Brasil"
@@ -744,13 +917,13 @@ const tableColumnsByEntity: Record<string, TableColumn[]> = {
     { key: "Id", label: "ID" },
     { key: "Nome", label: "Nome" },
     { key: "Cpf_Cnpj", label: "CPF" },
-    { key: "Situacao", label: "Status", status: "situacao" },
+    { key: "VinculoAtivo", label: "Status", status: "situacao" },
   ],
   veiculos: [
     { key: "Id", label: "ID" },
     { key: "NomeVeiculo", label: "Nome" },
+    { key: "PlacaVeiculo", label: "Placa" },
     { key: "ClienteId", label: "Nome do cliente", relationKey: "ClienteId" },
-    { key: "Status", label: "Status", status: "workflow" },
   ],
   funcionarios: [
     { key: "Id", label: "ID" },
@@ -778,9 +951,9 @@ const tableColumnsByEntity: Record<string, TableColumn[]> = {
   pedidos: [
     { key: "Id", label: "ID" },
     { key: "idCliente", label: "Nome do cliente", relationKey: "idCliente" },
-    { key: "idVeiculo", label: "Nome do veículo", relationKey: "idVeiculo" },
-    { key: "Status", label: "Status", status: "workflow" },
+    { key: "idVeiculo", label: "Placa", relationKey: "idVeiculo" },
     { key: "ValorTotal", label: "Valor", currency: true },
+    { key: "Status", label: "Status", status: "workflow" },
   ],
 };
 
@@ -796,7 +969,7 @@ const statusPresentation = (
   const normalized = String(value ?? "").trim().toLowerCase();
 
   if (kind === "situacao") {
-    const active = normalized === "1" || normalized === "ativo";
+    const active = normalized === "1" || normalized === "ativo" || normalized === "true";
     return active
       ? { label: "Ativo", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
       : { label: "Inativo", className: "border-red-200 bg-red-50 text-red-700" };
@@ -1027,16 +1200,30 @@ export default function GerenciaPage() {
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+
+  const [statusOrderItem, setStatusOrderItem] = useState<FormValue | null>(null);
+  const [nextOrderStatus, setNextOrderStatus] = useState(0);
+  const [statusSaving, setStatusSaving] = useState(false);
   const [stockAdjustmentItem, setStockAdjustmentItem] = useState<FormValue | null>(null);
   const [stockAdjustmentAmount, setStockAdjustmentAmount] = useState(1);
   const [stockAdjustmentSaving, setStockAdjustmentSaving] = useState(false);
-  const [vehicleStatus, setVehicleStatus] = useState(0);
   const [pedidoStatus, setPedidoStatus] = useState(0);
   const [originalPedidoPieceQuantities, setOriginalPedidoPieceQuantities] = useState<Record<string, number>>({});
   const [discountEnabled, setDiscountEnabled] = useState(false);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
   const [discountValue, setDiscountValue] = useState(0);
+  const [serviceDiscountEnabled, setServiceDiscountEnabled] = useState(false);
+  const [serviceDiscountType, setServiceDiscountType] = useState<DiscountType>("percent");
+  const [serviceDiscountValue, setServiceDiscountValue] = useState(0);
+  const [pieceDiscountEnabled, setPieceDiscountEnabled] = useState(false);
+  const [pieceDiscountType, setPieceDiscountType] = useState<DiscountType>("percent");
+  const [pieceDiscountValue, setPieceDiscountValue] = useState(0);
+  const [manualTotalEnabled, setManualTotalEnabled] = useState(false);
+  const [manualTotalValue, setManualTotalValue] = useState(0);
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState("");
+  const [filtersModalOpen, setFiltersModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [lastCepLookup, setLastCepLookup] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -1049,10 +1236,11 @@ export default function GerenciaPage() {
     {}
   );
   const [loggedOficinaName, setLoggedOficinaName] = useState("");
+  const [registrationOptions, setRegistrationOptions] = useState<Record<string, string[]>>({});
 
   const pedidoTotals = useMemo(() => {
     if (selectedConfig?.key !== "pedidos") {
-      return { pieces: 0, services: 0, gross: 0, discount: 0, total: 0 };
+      return { pieces: 0, services: 0, gross: 0, serviceDiscount: 0, pieceDiscount: 0, generalDiscount: 0, discount: 0, total: 0 };
     }
 
     const getPrice = (entityKey: string, id: unknown) => {
@@ -1068,7 +1256,9 @@ export default function GerenciaPage() {
         (candidate) => String(candidate.value) === String(id)
       );
       if (!option?.item) return 0;
-      return Math.max(0, Number(getRecordValue(option.item, "Valor")) || 0);
+      const packagePrice = Math.max(0, Number(getRecordValue(option.item, "Valor")) || 0);
+      const unitsPerPackage = Math.max(1, Number(getRecordValue(option.item, "Unidade")) || 1);
+      return packagePrice / unitsPerPackage;
     };
     const pieceItems = getRecordValue(formData, "Pedido_Pecas");
     const serviceItems = getRecordValue(formData, "Pedido_Servicos");
@@ -1076,7 +1266,11 @@ export default function GerenciaPage() {
       (total, item) =>
         total +
         (isPlainObject(item)
-          ? getPieceUnitPrice(getRecordValue(item, "IdPeca")) *
+          ? Math.max(
+              0,
+              Number(getRecordValue(item, "ValorUnitario")) ||
+                getPieceUnitPrice(getRecordValue(item, "IdPeca"))
+            ) *
             Math.max(0, Number(getRecordValue(item, "Quantidade")) || 0)
           : 0),
       0
@@ -1091,21 +1285,63 @@ export default function GerenciaPage() {
       0
     );
     const gross = pieces + services;
-    const requestedDiscount = discountEnabled
-      ? discountType === "percent"
-        ? gross * (Math.min(100, Math.max(0, discountValue)) / 100)
-        : Math.max(0, discountValue)
-      : 0;
-    const discount = Math.min(gross, requestedDiscount);
+    const calculateDiscount = (
+      enabled: boolean,
+      type: DiscountType,
+      value: number,
+      base: number
+    ) => {
+      if (!enabled) return 0;
+      const requested =
+        type === "percent"
+          ? base * (Math.min(100, Math.max(0, value)) / 100)
+          : Math.max(0, value);
+      return Math.min(base, requested);
+    };
+    const serviceDiscount = calculateDiscount(
+      serviceDiscountEnabled,
+      serviceDiscountType,
+      serviceDiscountValue,
+      services
+    );
+    const pieceDiscount = calculateDiscount(
+      pieceDiscountEnabled,
+      pieceDiscountType,
+      pieceDiscountValue,
+      pieces
+    );
+    const generalDiscount = calculateDiscount(
+      discountEnabled,
+      discountType,
+      discountValue,
+      gross
+    );
+    const discount = Math.min(gross, serviceDiscount + pieceDiscount + generalDiscount);
 
     return {
       pieces,
       services,
       gross,
+      serviceDiscount,
+      pieceDiscount,
+      generalDiscount,
       discount,
       total: Math.max(0, gross - discount),
     };
-  }, [discountEnabled, discountType, discountValue, formData, relationOptions, selectedConfig?.key]);
+  }, [
+    discountEnabled,
+    discountType,
+    discountValue,
+    serviceDiscountEnabled,
+    serviceDiscountType,
+    serviceDiscountValue,
+    pieceDiscountEnabled,
+    pieceDiscountType,
+    pieceDiscountValue,
+    formData,
+    relationOptions,
+    selectedConfig?.key,
+  ]);
 
   const getPedidoPieceQuantities = (source: FormValue): Record<string, number> => {
     const lines =
@@ -1242,6 +1478,16 @@ export default function GerenciaPage() {
         ? Math.min(100, Math.max(0, discountValue))
         : Math.min(pedidoTotals.gross, Math.max(0, discountValue))
       : 0;
+    const submittedServiceDiscount = serviceDiscountEnabled
+      ? serviceDiscountType === "percent"
+        ? Math.min(100, Math.max(0, serviceDiscountValue))
+        : Math.min(pedidoTotals.services, Math.max(0, serviceDiscountValue))
+      : 0;
+    const submittedPieceDiscount = pieceDiscountEnabled
+      ? pieceDiscountType === "percent"
+        ? Math.min(100, Math.max(0, pieceDiscountValue))
+        : Math.min(pedidoTotals.pieces, Math.max(0, pieceDiscountValue))
+      : 0;
 
     const withoutCalculatedFields = Object.fromEntries(
       Object.entries(payload).filter(
@@ -1258,20 +1504,50 @@ export default function GerenciaPage() {
           ].includes(normalizeFieldKey(key))
       )
     );
+    const pieceLines = getRecordValue(payload, "Pedido_Pecas") ?? getRecordValue(payload, "PedidoPecas");
+    const normalizedPieceLines = (Array.isArray(pieceLines) ? pieceLines : []).map((line) => {
+      if (!isPlainObject(line)) return line;
+      const pieceId = getRecordValue(line, "IdPeca");
+      const option = (relationOptions.pecas ?? []).find(
+        (candidate) => String(candidate.value) === String(pieceId)
+      );
+      const packagePrice = Math.max(0, Number(option?.item ? getRecordValue(option.item, "Valor") : 0) || 0);
+      const unitsPerPackage = Math.max(1, Number(option?.item ? getRecordValue(option.item, "Unidade") : 1) || 1);
+      const informedUnitPrice = Number(getRecordValue(line, "ValorUnitario"));
+      return {
+        ...line,
+        ValorUnitario: Number.isFinite(informedUnitPrice) && informedUnitPrice > 0
+          ? informedUnitPrice
+          : packagePrice / unitsPerPackage,
+      };
+    });
 
     return {
       ...withoutCalculatedFields,
-      ValorTotal: Math.round((pedidoTotals.total + Number.EPSILON) * 100) / 100,
+      Pedido_Pecas: normalizedPieceLines,
+      ValorTotal: Math.round(((manualTotalEnabled ? manualTotalValue : pedidoTotals.total) + Number.EPSILON) * 100) / 100,
       DescontoReais:
         discountEnabled && discountType === "money" ? submittedDiscount : 0,
       DescontoPorcentagem:
         discountEnabled && discountType === "percent" ? submittedDiscount : 0,
       DescontoTotalReais:
         Math.round((pedidoTotals.discount + Number.EPSILON) * 100) / 100,
-      DescontoServicoPorcentagem: 0,
-      DescontoServicoReais: 0,
-      DescontoPecaPorcentagem: 0,
-      descontoPecaReais: 0,
+      DescontoServicoPorcentagem:
+        serviceDiscountEnabled && serviceDiscountType === "percent"
+          ? submittedServiceDiscount
+          : 0,
+      DescontoServicoReais:
+        serviceDiscountEnabled && serviceDiscountType === "money"
+          ? submittedServiceDiscount
+          : 0,
+      DescontoPecaPorcentagem:
+        pieceDiscountEnabled && pieceDiscountType === "percent"
+          ? submittedPieceDiscount
+          : 0,
+      DescontoPecaReais:
+        pieceDiscountEnabled && pieceDiscountType === "money"
+          ? submittedPieceDiscount
+          : 0,
     };
   };
 
@@ -1280,6 +1556,53 @@ export default function GerenciaPage() {
     [token]
   );
 
+  const loadRegistrationOptions = async () => {
+    if (!token) {
+      setRegistrationOptions({});
+      return;
+    }
+    const result = await fetchJson(baseUrl, "/api/v1/opcoes-cadastro", {
+      method: "GET",
+      headers: authHeaders,
+    });
+    if (!result.ok) return;
+    const incoming = extractRegistrationOptions(result.data);
+    setRegistrationOptions((current) => {
+      const fields = new Set([...Object.keys(current), ...Object.keys(incoming)]);
+      return Object.fromEntries(
+        [...fields].map((field) => [
+          field,
+          mergeEditableOptions(current[field] ?? [], incoming[field] ?? []),
+        ])
+      );
+    });
+  };
+
+  const rememberFormRegistrationOptions = (source: FormValue) => {
+    const supportedFields = new Set([
+      "modeloveiculo",
+      "combustivel",
+      "cor",
+      "cargo",
+      "tipomarca",
+      "fornecedor",
+    ]);
+    setRegistrationOptions((current) => {
+      const next = { ...current };
+      Object.entries(source).forEach(([key, rawValue]) => {
+        const normalized = normalizeFieldKey(key);
+        if (!supportedFields.has(normalized)) return;
+        const value = typeof rawValue === "string" ? rawValue.trim() : "";
+        if (!value) return;
+        next[normalized] = mergeEditableOptions(next[normalized] ?? [], [value]);
+      });
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    void loadRegistrationOptions();
+  }, [authHeaders, baseUrl, token]);
   useEffect(() => {
     if (selectedConfig?.key !== "veiculos" || savedImages.length === 0) {
       setSavedImagePreviews([]);
@@ -1347,6 +1670,7 @@ export default function GerenciaPage() {
 
   const selectEntity = (key: string) => {
     setSelectedKey(key);
+    setFilterValues({});
     setSearchTerm("");
     setCurrentPage(1);
     setShowForm(false);
@@ -1478,18 +1802,26 @@ export default function GerenciaPage() {
     if (!selectedConfig) return;
     setFormMode("create");
     setEditingId(null);
-    setVehicleStatus(0);
     setPedidoStatus(0);
     setOriginalPedidoPieceQuantities({});
     setDiscountEnabled(false);
     setDiscountType("percent");
     setDiscountValue(0);
+    setServiceDiscountEnabled(false);
+    setServiceDiscountType("percent");
+    setServiceDiscountValue(0);
+    setPieceDiscountEnabled(false);
+    setPieceDiscountType("percent");
+    setPieceDiscountValue(0);
+    setManualTotalEnabled(false);
+    setManualTotalValue(0);
     setFormData(
       applyLoggedOficina(createEmptyListForm(getCreateTemplate(selectedConfig)))
     );
     setImageFiles([]);
     setSavedImages([]);
     setShowForm(false);
+    setFilterValues({});
     setSearchTerm("");
     setCurrentPage(1);
     loadList(selectedConfig);
@@ -1497,7 +1829,7 @@ export default function GerenciaPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [filterValues, searchTerm]);
 
   useEffect(() => {
     if (!token) return;
@@ -1538,17 +1870,25 @@ export default function GerenciaPage() {
     if (!selectedConfig || !canCreateSelected) return;
     setFormMode("create");
     setEditingId(null);
-    setVehicleStatus(0);
     setPedidoStatus(0);
     setDiscountEnabled(false);
     setDiscountType("percent");
     setDiscountValue(0);
+    setServiceDiscountEnabled(false);
+    setServiceDiscountType("percent");
+    setServiceDiscountValue(0);
+    setPieceDiscountEnabled(false);
+    setPieceDiscountType("percent");
+    setPieceDiscountValue(0);
+    setManualTotalEnabled(false);
+    setManualTotalValue(0);
     setFormData(
       applyLoggedOficina(createEmptyListForm(getCreateTemplate(selectedConfig)))
     );
     setImageFiles([]);
     setSavedImages([]);
     void loadRelationOptions();
+    void loadRegistrationOptions();
     setShowForm(true);
   };
 
@@ -1662,9 +2002,6 @@ export default function GerenciaPage() {
 
     setFormMode(nextMode);
     setEditingId(id);
-    if (selectedConfig.key === "veiculos") {
-      setVehicleStatus(normalizeVehicleStatus(getRecordValue(itemToEdit, "Status")));
-    }
     if (selectedConfig.key === "pedidos") {
       setPedidoStatus(normalizeWorkflowStatus(getRecordValue(itemToEdit, "Status")));
       setOriginalPedidoPieceQuantities(getPedidoPieceQuantities(itemToEdit));
@@ -1675,6 +2012,20 @@ export default function GerenciaPage() {
       setDiscountEnabled(percentage > 0 || money > 0);
       setDiscountType(percentage > 0 ? "percent" : "money");
       setDiscountValue(percentage > 0 ? percentage : money);
+      const servicePercentage = Number(getRecordValue(itemToEdit, "DescontoServicoPorcentagem")) || 0;
+      const serviceMoney = Number(getRecordValue(itemToEdit, "DescontoServicoReais")) || 0;
+      setServiceDiscountEnabled(servicePercentage > 0 || serviceMoney > 0);
+      setServiceDiscountType(servicePercentage > 0 ? "percent" : "money");
+      setServiceDiscountValue(servicePercentage > 0 ? servicePercentage : serviceMoney);
+      const piecePercentage = Number(getRecordValue(itemToEdit, "DescontoPecaPorcentagem")) || 0;
+      const pieceMoney = Number(getRecordValue(itemToEdit, "DescontoPecaReais")) || 0;
+      setPieceDiscountEnabled(piecePercentage > 0 || pieceMoney > 0);
+      setPieceDiscountType(piecePercentage > 0 ? "percent" : "money");
+      setPieceDiscountValue(piecePercentage > 0 ? piecePercentage : pieceMoney);
+    }
+    if (selectedConfig.key === "pedidos") {
+      setManualTotalEnabled(false);
+      setManualTotalValue(Math.max(0, Number(getRecordValue(itemToEdit, "ValorTotal")) || 0));
     }
     if (selectedConfig.key === "pecas") {
       itemToEdit = normalizePieceFormRecord(itemToEdit);
@@ -1682,9 +2033,17 @@ export default function GerenciaPage() {
     setImageFiles([]);
     setSavedImages(getImageList(selectedConfig.key, itemToEdit));
     void loadRelationOptions();
-    setFormData(
-      applyLoggedOficina(mergeWithTemplate(selectedConfig.template, itemToEdit) as FormValue)
+    void loadRegistrationOptions();
+    const mergedEditData = applyLoggedOficina(
+      mergeWithTemplate(selectedConfig.template, itemToEdit) as FormValue
     );
+    if (selectedConfig.key === "funcionarios") {
+      const passwordKey = Object.keys(mergedEditData).find(
+        (key) => normalizeFieldKey(key) === "senha"
+      );
+      if (passwordKey) mergedEditData[passwordKey] = "";
+    }
+    setFormData(mergedEditData);
     setShowForm(true);
   };
 
@@ -1769,6 +2128,11 @@ export default function GerenciaPage() {
 
   const handleCreate = async () => {
     if (!selectedConfig || !canCreateSelected) return;
+    const formValidationError = getFormValidationError(selectedConfig.key, formData, "create");
+    if (formValidationError) {
+      setError(formValidationError);
+      return;
+    }
     if (selectedConfig.key === "veiculos") {
       const validationError = getVehicleValidationError(formData);
       if (validationError) {
@@ -1870,12 +2234,7 @@ export default function GerenciaPage() {
         );
 
         if (!childResult.ok) {
-          const message =
-            isPlainObject(childResult.data) &&
-            typeof childResult.data.Message === "string"
-              ? childResult.data.Message
-              : "Registro principal criado, mas falha ao salvar itens vinculados";
-          setError(message);
+          setError(getApiErrorMessage(childResult.data, "Registro principal criado, mas falha ao salvar itens vinculados"));
           setIsLoading(false);
           return;
         }
@@ -1902,8 +2261,9 @@ export default function GerenciaPage() {
       if (!uploaded) return;
     }
 
+    rememberFormRegistrationOptions(formData);
     setShowForm(false);
-    await loadList(selectedConfig);
+    await Promise.all([loadList(selectedConfig), loadRegistrationOptions()]);
   };
 
   const handleUpdate = async () => {
@@ -1912,6 +2272,11 @@ export default function GerenciaPage() {
       !editingId ||
       !selectedCapability?.canUpdate
     ) {
+      return;
+    }
+    const formValidationError = getFormValidationError(selectedConfig.key, formData, "edit");
+    if (formValidationError) {
+      setError(formValidationError);
       return;
     }
     if (selectedConfig.key === "veiculos") {
@@ -2017,11 +2382,7 @@ export default function GerenciaPage() {
     );
 
     if (!result.ok) {
-      const message =
-        isPlainObject(result.data) && typeof result.data.Message === "string"
-          ? result.data.Message
-          : "Falha ao atualizar registro";
-      setError(message);
+      setError(getApiErrorMessage(result.data, "Falha ao atualizar registro"));
       setIsLoading(false);
       return;
     }
@@ -2036,101 +2397,27 @@ export default function GerenciaPage() {
       }
     }
 
-    if (selectedConfig.key === "pedidos") {
-      const vehicleId = Number(
-        getRecordValue(formData, "idVeiculo") ??
-          getRecordValue(formData, "VeiculoId")
-      );
-      if (Number.isFinite(vehicleId) && vehicleId > 0) {
-        const ordersCheck = await fetchJson(
-          baseUrl,
-          "/api/v1/pedidos?page=1&pageSize=100",
-          { method: "GET", headers: authHeaders }
-        );
-        if (!ordersCheck.ok) {
-          setError(
-            `Status do pedido atualizado, mas não foi possível verificar os pedidos do veículo: ${getApiErrorMessage(
-              ordersCheck.data,
-              `erro ${ordersCheck.status}`
-            )}`
-          );
-          setIsLoading(false);
-          return;
-        }
-        const currentOrders = await fetchAllDashboardRecords(
-          baseUrl,
-          "/api/v1/pedidos",
-          authHeaders
-        );
-        const relatedOrders = currentOrders.filter(
-          (order) =>
-            Number(
-              getRecordValue(order, "idVeiculo") ??
-                getRecordValue(order, "VeiculoId")
-            ) === vehicleId
-        );
-        const hasEditedOrder = relatedOrders.some(
-          (order) => getItemId(order) === editingId
-        );
-        if (!hasEditedOrder) {
-          relatedOrders.push({
-            Id: editingId,
-            idVeiculo: vehicleId,
-            Status: updatedPedidoStatus,
-          });
-        }
-        const synchronizedStatuses = relatedOrders.map((order) =>
-          getItemId(order) === editingId
-            ? updatedPedidoStatus
-            : normalizeWorkflowStatus(getRecordValue(order, "Status"))
-        );
-        const allOrdersCompleted =
-          synchronizedStatuses.length > 0 &&
-          synchronizedStatuses.every((status) => status === 3);
-
-        if (allOrdersCompleted) {
-          const vehicleStatusResult = await fetchJson(
-            baseUrl,
-            `/api/v1/veiculos/${vehicleId}/status`,
-            {
-              method: "PATCH",
-              headers: authHeaders,
-              body: { status: 3 },
-            }
-          );
-
-          if (!vehicleStatusResult.ok) {
-            setError(
-              `Todos os pedidos foram concluídos, mas o PATCH do veículo falhou: ${getApiErrorMessage(
-                vehicleStatusResult.data,
-                `erro ${vehicleStatusResult.status}`
-              )}`
-            );
-            setIsLoading(false);
-            return;
-          }
-        }
-      }
-    }
-
     const uploaded = await uploadImagesForEntity(selectedConfig.key, editingId);
     if (!uploaded) return;
 
+    rememberFormRegistrationOptions(formData);
     setShowForm(false);
-    await loadList(selectedConfig);
+    await Promise.all([loadList(selectedConfig), loadRegistrationOptions()]);
   };
 
   const handleDelete = async (id: number) => {
     if (!selectedConfig?.deletePath || !selectedCapability?.canDelete) return;
-    const actionLabel = getDeleteActionLabel(selectedConfig.key).toLowerCase();
-    if (!window.confirm(`Deseja realmente ${actionLabel} este registro?`)) return;
-
+    setPendingDeleteId(null);
     setIsLoading(true);
     setError(null);
+    const normalizedUserRole = normalizeRole(userRole);
     const deletePath =
-      selectedConfig.key === "clientes" && normalizeRole(userRole) === "oficina"
+      selectedConfig.key === "clientes" && ["oficina", "funcionario"].includes(normalizedUserRole)
         ? `/api/v1/oficinas/me/clientes/${id}/vinculo`
-        : selectedConfig.deletePath(String(id));
+        : selectedConfig.key === "veiculos" &&
+            ["oficina", "funcionario"].includes(normalizedUserRole)
+          ? `/api/v1/oficinas/me/veiculos/${id}`
+          : selectedConfig.deletePath(String(id));
     const result = await fetchJson(
       baseUrl,
       deletePath,
@@ -2141,15 +2428,37 @@ export default function GerenciaPage() {
     );
 
     if (!result.ok) {
-      const message =
-        isPlainObject(result.data) && typeof result.data.Message === "string"
-          ? result.data.Message
-          : `Falha ao ${actionLabel} registro`;
-      setError(message);
+      setError(getApiErrorMessage(result.data, `Falha ao ${getDeleteActionLabel(selectedConfig.key).toLowerCase()} registro`));
       setIsLoading(false);
       return;
     }
 
+    await loadList(selectedConfig);
+  };
+
+  const openOrderStatusModal = (item: FormValue) => {
+    setStatusOrderItem(item);
+    setNextOrderStatus(normalizeWorkflowStatus(getRecordValue(item, "Status")));
+    setError(null);
+  };
+
+  const handleOrderStatusUpdate = async () => {
+    const orderId = statusOrderItem ? getItemId(statusOrderItem) : null;
+    if (!orderId || selectedConfig.key !== "pedidos") return;
+    setStatusSaving(true);
+    setError(null);
+    const result = await fetchJson(baseUrl, `/api/v1/pedidos/${orderId}/status`, {
+      method: "PATCH",
+      headers: authHeaders,
+      body: { status: nextOrderStatus },
+    });
+    if (!result.ok) {
+      setError(getApiErrorMessage(result.data, "Falha ao atualizar o status do pedido."));
+      setStatusSaving(false);
+      return;
+    }
+    setStatusOrderItem(null);
+    setStatusSaving(false);
     await loadList(selectedConfig);
   };
 
@@ -2225,21 +2534,22 @@ export default function GerenciaPage() {
         selectedConfig.key === "clientes" && normalized.includes("cpfcnpj")
           ? formatCpf(value)
           : maskFieldValue(key, value);
+    } else if (normalized === "ean") {
+      nextValue = onlyDigits(value).slice(0, 13);
     } else if (["placaveiculo", "chassiveiculo", "seguro"].includes(normalized)) {
       nextValue = normalizeSpecialTextField(key, value);
     } else if (typeof templateValue === "number") {
       const parsed = Number(value);
       nextValue = Number.isNaN(parsed) ? templateValue : parsed;
     } else {
-      nextValue = maskFieldValue(key, value);
-    }
-
-    if (
-      selectedConfig.key === "veiculos" &&
-      path.length === 1 &&
-      normalized === "status"
-    ) {
-      setVehicleStatus(normalizeVehicleStatus(nextValue));
+      const maskedValue = maskFieldValue(key, value);
+      nextValue =
+        typeof templateValue === "string" &&
+        !normalized.includes("email") &&
+        !normalized.includes("senha") &&
+        !normalized.startsWith("data")
+          ? String(maskedValue).toUpperCase()
+          : maskedValue;
     }
 
     if (
@@ -2417,6 +2727,63 @@ export default function GerenciaPage() {
     );
   };
 
+  const renderDiscountControl = (
+    title: string,
+    enabled: boolean,
+    setEnabled: (enabled: boolean) => void,
+    type: DiscountType,
+    setType: (type: DiscountType) => void,
+    value: number,
+    setValue: (value: number) => void,
+    maximum: number,
+    applied: number
+  ) => (
+    <div className="rounded-md border border-[var(--sigo-border)] bg-white p-3">
+      <button
+        type="button"
+        className="text-sm font-extrabold text-[var(--sigo-blue)]"
+        onClick={() => {
+          setEnabled(!enabled);
+          if (enabled) setValue(0);
+        }}
+      >
+        {enabled ? `Remover ${title.toLowerCase()}` : `+ Adicionar ${title.toLowerCase()}`}
+      </button>
+      {enabled ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr]">
+          <label className="sigo-label">
+            <span>Tipo de desconto</span>
+            <select
+              className="sigo-input bg-white"
+              value={type}
+              onChange={(event) => {
+                setType(event.target.value as DiscountType);
+                setValue(0);
+              }}
+            >
+              <option value="percent">Porcentagem (%)</option>
+              <option value="money">Valor em reais (R$)</option>
+            </select>
+          </label>
+          <label className="sigo-label">
+            <span>{type === "percent" ? "Desconto (%)" : "Desconto (R$)"}</span>
+            <input
+              className="sigo-input bg-white"
+              type="number"
+              min="0"
+              max={type === "percent" ? 100 : maximum}
+              step={type === "percent" ? 1 : 0.01}
+              value={value}
+              onChange={(event) => setValue(Math.max(0, Number(event.target.value) || 0))}
+            />
+          </label>
+          <p className="text-xs font-bold text-[var(--sigo-muted)] sm:col-span-2">
+            Aplicado: {currencyFormatter.format(applied)}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
   const renderFields = (
     template: Record<string, unknown>,
     value: Record<string, unknown>,
@@ -2499,59 +2866,78 @@ export default function GerenciaPage() {
               <div className="rounded-md border border-[var(--sigo-border)] bg-white p-3">
                 <p className="text-xs font-bold text-[var(--sigo-muted)]">Valor total</p>
                 <p className="mt-1 text-base font-black text-[var(--sigo-blue)]">
-                  {currencyFormatter.format(pedidoTotals.total)}
+                  {currencyFormatter.format(manualTotalEnabled ? manualTotalValue : pedidoTotals.total)}
                 </p>
               </div>
             </div>
 
             {formMode !== "view" ? (
               <div>
-                <button
-                  type="button"
-                  className="text-sm font-extrabold text-[var(--sigo-blue)]"
-                  onClick={() => {
-                    setDiscountEnabled((current) => !current);
-                    if (discountEnabled) setDiscountValue(0);
-                  }}
-                >
-                  {discountEnabled ? "Remover desconto" : "+ Adicionar desconto"}
-                </button>
-
-                {discountEnabled ? (
-                  <div className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr]">
-                    <label className="sigo-label">
-                      <span>Tipo de desconto</span>
-                      <select
-                        className="sigo-input bg-white"
-                        value={discountType}
-                        onChange={(event) => {
-                          setDiscountType(event.target.value as DiscountType);
-                          setDiscountValue(0);
-                        }}
-                      >
-                        <option value="percent">Porcentagem (%)</option>
-                        <option value="money">Valor em reais (R$)</option>
-                      </select>
-                    </label>
-                    <label className="sigo-label">
-                      <span>{discountType === "percent" ? "Desconto (%)" : "Desconto (R$)"}</span>
-                      <input
-                        className="sigo-input bg-white"
-                        type="number"
-                        min="0"
-                        max={discountType === "percent" ? 100 : pedidoTotals.gross}
-                        step={discountType === "percent" ? 1 : 0.01}
-                        value={discountValue}
-                        onChange={(event) =>
-                          setDiscountValue(Math.max(0, Number(event.target.value) || 0))
-                        }
-                      />
-                    </label>
-                    <p className="text-xs font-bold text-[var(--sigo-muted)] sm:col-span-2">
-                      Desconto aplicado: {currencyFormatter.format(pedidoTotals.discount)}
-                    </p>
-                  </div>
+                <label className="mb-3 flex cursor-pointer items-center gap-3 rounded-md border border-[var(--sigo-border)] bg-white p-3 text-sm font-bold text-[var(--sigo-text)]">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--sigo-blue)]"
+                    checked={manualTotalEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setManualTotalEnabled(enabled);
+                      if (enabled && manualTotalValue <= 0) setManualTotalValue(pedidoTotals.total);
+                    }}
+                  />
+                  Alterar valor total manualmente
+                </label>
+                {manualTotalEnabled ? (
+                  <label className="sigo-label mb-3">
+                    <span>Valor total manual</span>
+                    <input
+                      className="sigo-input bg-white"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={manualTotalValue}
+                      onChange={(event) => setManualTotalValue(Math.max(0, Number(event.target.value) || 0))}
+                    />
+                    <small className="text-xs font-semibold text-amber-700">
+                      Este valor substituirá o total calculado automaticamente.
+                    </small>
+                  </label>
                 ) : null}
+                <div className="grid gap-3">
+                  {renderDiscountControl(
+                    "Desconto geral",
+                    discountEnabled,
+                    setDiscountEnabled,
+                    discountType,
+                    setDiscountType,
+                    discountValue,
+                    setDiscountValue,
+                    pedidoTotals.gross,
+                    pedidoTotals.generalDiscount
+                  )}
+                  {renderDiscountControl(
+                    "Desconto de serviços",
+                    serviceDiscountEnabled,
+                    setServiceDiscountEnabled,
+                    serviceDiscountType,
+                    setServiceDiscountType,
+                    serviceDiscountValue,
+                    setServiceDiscountValue,
+                    pedidoTotals.services,
+                    pedidoTotals.serviceDiscount
+                  )}
+                  {renderDiscountControl(
+                    "Desconto de peças",
+                    pieceDiscountEnabled,
+                    setPieceDiscountEnabled,
+                    pieceDiscountType,
+                    setPieceDiscountType,
+                    pieceDiscountValue,
+                    setPieceDiscountValue,
+                    pedidoTotals.pieces,
+                    pedidoTotals.pieceDiscount
+                  )}
+                </div>
               </div>
             ) : pedidoTotals.discount > 0 ? (
               <p className="text-sm font-bold text-[var(--sigo-muted)]">
@@ -2678,11 +3064,7 @@ export default function GerenciaPage() {
       }
 
       const normalizedValue =
-        selectedConfig.key === "veiculos" &&
-        fieldPath.length === 1 &&
-        normalizeFieldKey(key) === "status"
-          ? vehicleStatus
-          : selectedConfig.key === "pedidos" &&
+        selectedConfig.key === "pedidos" &&
               fieldPath.length === 1 &&
               normalizeFieldKey(key) === "status"
             ? pedidoStatus
@@ -2710,7 +3092,7 @@ export default function GerenciaPage() {
             : maskFieldValue(key, normalizedValue)
           : String(normalizedValue);
       const fieldOptions = getFieldOptions(key, path, selectedConfig.key);
-      const editableFieldOptions = getEditableFieldOptions(selectedConfig.key, key);
+      const editableFieldOptions = getEditableFieldOptions(selectedConfig.key, key, registrationOptions);
       const editableOptionsId = editableFieldOptions
         ? `options-${selectedConfig.key}-${fieldPath.join("-")}`
         : undefined;
@@ -2765,6 +3147,7 @@ export default function GerenciaPage() {
                 onChange={(event) =>
                   handleFieldChange(fieldPath, templateValue, event.target.value)
                 }
+
               />
               {!displayValue ? (
                 <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 text-center text-xs font-semibold text-[var(--sigo-soft)]">
@@ -2829,7 +3212,7 @@ export default function GerenciaPage() {
 
       return (
         <label key={fieldPath.join(".")} className="sigo-label rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3">
-          <span>{formatFieldLabel(key)}</span>
+          <span>{selectedConfig.key === "funcionarios" && normalizeFieldKey(key) === "senha" ? (formMode === "edit" ? "Redefinição de senha" : "Senha inicial") : formatFieldLabel(key)}</span>
           {fieldOptions ? (
             <select
               className="sigo-input"
@@ -2854,13 +3237,17 @@ export default function GerenciaPage() {
           ) : (
             <>
               <input
-                className="sigo-input"
+                className={`sigo-input ${typeof templateValue === "string" && !normalizeFieldKey(key).includes("email") && !normalizeFieldKey(key).includes("senha") ? "uppercase" : ""}`}
                 type={getInputType(key, templateValue)}
                 value={displayValue}
                 disabled={formMode === "view"}
                 list={editableOptionsId}
                 placeholder={
-                  normalizeFieldKey(key).includes("cpf")
+                  ["valor", "valorunitario"].includes(normalizeFieldKey(key))
+                    ? "0,00"
+                    : normalizeFieldKey(key) === "ean"
+                      ? "00000000 ou 0000000000000"
+                    : normalizeFieldKey(key).includes("cpf")
                     ? "000.000.000-00"
                     : normalizeFieldKey(key) === "cep"
                       ? "00000-000"
@@ -2880,30 +3267,44 @@ export default function GerenciaPage() {
                         : normalizeFieldKey(key) === "chassiveiculo"
                           ? 17
                           : normalizeFieldKey(key) === "seguro"
-                            ? 30
+                            ? 100
+                            : normalizeFieldKey(key) === "ean"
+                              ? 13
                             : undefined
                 }
-                minLength={normalizeFieldKey(key) === "seguro" ? 5 : undefined}
                 pattern={
                   normalizeFieldKey(key) === "placaveiculo"
                     ? "(?:[A-Z]{3}[0-9][A-Z][0-9]{2}|[A-Z]{3}[0-9]{4})"
                     : normalizeFieldKey(key) === "chassiveiculo"
                       ? "[A-HJ-NPR-Z0-9]{17}"
                       : normalizeFieldKey(key) === "seguro"
-                        ? "[A-Za-z0-9./-]{5,30}"
+                        ? "[0-9]{0,100}"
                         : undefined
                 }
                 inputMode={
-                  normalizeFieldKey(key).includes("cpf") ||
-                  normalizeFieldKey(key).includes("cnpj") ||
-                  normalizeFieldKey(key) === "cep"
-                    ? "numeric"
+                  ["valor", "valorunitario"].includes(normalizeFieldKey(key))
+                    ? "decimal"
+                    : ["ean", "seguro"].includes(normalizeFieldKey(key))
+                      ? "numeric"
+                    : normalizeFieldKey(key).includes("cpf") ||
+                        normalizeFieldKey(key).includes("cnpj") ||
+                        normalizeFieldKey(key) === "cep"
+                      ? "numeric"
+                      : undefined
+                }
+                step={
+                  ["valor", "valorunitario"].includes(normalizeFieldKey(key))
+                    ? "0.01"
                     : undefined
                 }
                 onChange={(event) =>
                   handleFieldChange(fieldPath, templateValue, event.target.value)
                 }
+
               />
+              {selectedConfig.key === "funcionarios" && normalizeFieldKey(key) === "senha" && formMode === "edit" ? (
+                <p className="mt-2 text-xs font-bold text-amber-700">Ao preencher este campo, a senha atual do funcionário será redefinida.</p>
+              ) : null}
               {editableFieldOptions ? (
                 <datalist id={editableOptionsId}>
                   {editableFieldOptions.map((option) => (
@@ -2937,14 +3338,87 @@ export default function GerenciaPage() {
       key,
       label: formatFieldLabel(key),
     }));
-  const filteredItems = items.filter((item) => {
-    const query = searchTerm.trim().toLowerCase();
-    if (!query) return true;
+  const filterDefinitions = managementFiltersByEntity[selectedConfig.key] ?? [];
+  const normalizeFilterText = (value: unknown) =>
+    String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const matchesFilterFields = (item: FormValue, fields: string[], query: string) =>
+    fields.some((field) => normalizeFilterText(getRecordValue(item, field)).includes(normalizeFilterText(query)));
 
-    return Object.keys(selectedConfig.template).some((key) => {
-      const rawValue = getRecordValue(item, key) ?? item[key];
-      const formattedValue = formatValue(key, rawValue, relationOptions);
-      return formattedValue.toLowerCase().includes(query);
+  const filteredItems = items.filter((item) => {
+    const globalQuery = normalizeFilterText(searchTerm.trim());
+    const matchesGlobalSearch =
+      !globalQuery ||
+      Object.keys(selectedConfig.template).some((key) =>
+        normalizeFilterText(
+          formatValue(key, getRecordValue(item, key) ?? item[key], relationOptions)
+        ).includes(globalQuery)
+      );
+    if (!matchesGlobalSearch) return false;
+    return filterDefinitions.every((filter) => {
+      const query = String(filterValues[filter.key] ?? "").trim();
+      if (!query) return true;
+      if (filter.fields?.length) {
+        if (["id", "year"].includes(filter.key)) {
+          return filter.fields.some((field) => String(getRecordValue(item, field) ?? "") === query);
+        }
+        return matchesFilterFields(item, filter.fields, query);
+      }
+
+      if (filter.key === "phone") {
+        const phones = getRecordValue(item, "Telefones");
+        return (Array.isArray(phones) ? phones : []).some((phone) => {
+          if (!isPlainObject(phone)) return false;
+          return onlyDigits(`${getRecordValue(phone, "DDD") ?? ""}${getRecordValue(phone, "Numero") ?? ""}`).includes(onlyDigits(query));
+        });
+      }
+      if (filter.key === "situation") {
+        if (selectedConfig.key === "clientes") {
+          const linkValue = getRecordValue(item, "VinculoAtivo");
+          const isActive =
+            linkValue === true ||
+            String(linkValue ?? "").trim().toLowerCase() === "true" ||
+            String(linkValue ?? "").trim() === "1";
+          return query === (isActive ? "1" : "2");
+        }
+        return String(getRecordValue(item, "Situacao") ?? getRecordValue(item, "Status") ?? "") === query;
+      }
+      if (filter.key === "owner") {
+        return normalizeFilterText(findRelationLabel(relationOptions, "ClienteId", getRecordValue(item, "ClienteId"))).includes(normalizeFilterText(query));
+      }
+      if (filter.key === "brand") {
+        return normalizeFilterText(findRelationLabel(relationOptions, "IdMarca", getRecordValue(item, "IdMarca"))).includes(normalizeFilterText(query));
+      }
+      if (filter.key === "stock") {
+        const stock = Number(getRecordValue(item, "quantidadeEstoque") ?? getRecordValue(item, "Quantidade_Estoque") ?? 0);
+        return query === "with" ? stock > 0 : stock <= 0;
+      }
+      if (filter.key === "serviceEmployee") {
+        const connections = getRecordValue(item, "Funcionario_Servicos") ?? getRecordValue(item, "FuncionarioServicos");
+        return (Array.isArray(connections) ? connections : []).some((connection) =>
+          isPlainObject(connection) && normalizeFilterText(
+            findRelationLabel(relationOptions, "IdFuncionario", getRecordValue(connection, "IdFuncionario"))
+          ).includes(normalizeFilterText(query))
+        );
+      }
+      if (filter.key === "client") {
+        return normalizeFilterText(findRelationLabel(relationOptions, "idCliente", getRecordValue(item, "idCliente"))).includes(normalizeFilterText(query));
+      }
+      if (filter.key === "employee") {
+        return normalizeFilterText(findRelationLabel(relationOptions, "idFuncionario", getRecordValue(item, "idFuncionario"))).includes(normalizeFilterText(query));
+      }
+      if (filter.key === "vehicle") {
+        const vehicleId = getRecordValue(item, "idVeiculo");
+        const option = (relationOptions.veiculos ?? []).find((candidate) => String(candidate.value) === String(vehicleId));
+        const searchable = option?.item
+          ? `${option.label} ${getRecordValue(option.item, "PlacaVeiculo") ?? ""}`
+          : option?.label ?? "";
+        return normalizeFilterText(searchable).includes(normalizeFilterText(query));
+      }
+      if (filter.key === "orderStatus") return String(getRecordValue(item, "Status") ?? "") === query;
+      if (filter.key === "startDate") return String(getRecordValue(item, "DataInicio") ?? "").slice(0, 10) === query;
+      if (filter.key === "endDate") return String(getRecordValue(item, "DataFim") ?? "").slice(0, 10) === query;
+      if (filter.key === "value") return Number(getRecordValue(item, "ValorTotal")) === Number(query);
+      return true;
     });
   });
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
@@ -2956,7 +3430,7 @@ export default function GerenciaPage() {
   );
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={["oficina", "funcionario"]}>
       <div className="sigo-page">
       <NavBar />
       <main className="sigo-shell sigo-dashboard-shell sigo-management-shell grid gap-7 py-8 lg:grid-cols-[310px_minmax(0,1fr)] lg:items-start">
@@ -3000,8 +3474,8 @@ export default function GerenciaPage() {
                 </div>
               ) : null}
 
-              <div className="mb-4 grid gap-3 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-                <label className="sigo-label">
+              <div className="mb-4 grid gap-3 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                <label className="sigo-label min-w-0">
                   <span>Pesquisar registros</span>
                   <input
                     className="sigo-input bg-white"
@@ -3011,17 +3485,29 @@ export default function GerenciaPage() {
                     onChange={(event) => setSearchTerm(event.target.value)}
                   />
                 </label>
-                <label className="sigo-label min-w-44">
-                  <span>Filtro</span>
-                  <select className="sigo-input bg-white" defaultValue="">
-                    <option value="">Todos os registros</option>
-                    <option value="recentes">Mais recentes</option>
-                    <option value="ativos">Ativos</option>
-                    <option value="pendentes">Pendentes</option>
-                  </select>
-                </label>
+                <button
+                  type="button"
+                  className="sigo-button min-h-[46px] min-w-40 bg-white text-[var(--sigo-muted)]"
+                  onClick={() => setFiltersModalOpen(true)}
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5 fill-none stroke-slate-500"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M4 5h16l-6 7v5l-4 2v-7L4 5Z" />
+                  </svg>
+                  Filtros
+                  {Object.values(filterValues).filter(Boolean).length > 0 ? (
+                    <span className="sigo-badge ml-1">
+                      {Object.values(filterValues).filter(Boolean).length}
+                    </span>
+                  ) : null}
+                </button>
               </div>
-
               <div className="h-[27.5rem] overflow-hidden">
                 {showLoading ? (
                   <div className="flex h-full items-center justify-center">
@@ -3043,7 +3529,7 @@ export default function GerenciaPage() {
                             {column.label}
                           </th>
                         ))}
-                        <th className="w-24 whitespace-nowrap text-center">Ações</th>
+                        <th className={`${selectedConfig.key === "pedidos" ? "w-32" : "w-24"} whitespace-nowrap text-center`}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3096,7 +3582,20 @@ export default function GerenciaPage() {
                                 );
                               }
 
-                              const value = column.relationKey
+                              const relatedVehicle =
+                                selectedConfig.key === "pedidos" && column.label === "Placa"
+                                  ? (relationOptions.veiculos ?? []).find(
+                                      (option) => String(option.value) === String(rawValue)
+                                    )?.item
+                                  : undefined;
+                              const value =
+                                selectedConfig.key === "pedidos" && column.label === "Placa"
+                                  ? String(
+                                      relatedVehicle
+                                        ? getRecordValue(relatedVehicle, "PlacaVeiculo") ?? "-"
+                                        : "-"
+                                    )
+                                  : column.relationKey
                                 ? findRelationLabel(
                                     relationOptions,
                                     column.relationKey,
@@ -3117,11 +3616,11 @@ export default function GerenciaPage() {
                               );
                             })}
                             <td
-                              className="w-24 whitespace-nowrap"
+                              className={`${selectedConfig.key === "pedidos" ? "w-32" : "w-24"} whitespace-nowrap`}
                               onClick={(event) => event.stopPropagation()}
                               onKeyDown={(event) => event.stopPropagation()}
                             >
-                              <div className="flex w-24 flex-nowrap items-center justify-center gap-1">
+                              <div className={`flex ${selectedConfig.key === "pedidos" ? "w-32" : "w-24"} flex-nowrap items-center justify-center gap-1`}>
                                 {selectedConfig.key === "pecas" && selectedCapability?.canUpdate ? (
                                   <button
                                     type="button"
@@ -3134,10 +3633,27 @@ export default function GerenciaPage() {
                                     <img
                                       src="/mais.png"
                                       alt=""
+                                      className="sigo-record-add-icon h-5 w-5 object-contain"
+                                    />
+                                  </button>
+                                ) : null}
+                                {selectedConfig.key === "pedidos" && selectedCapability?.canUpdate ? (
+                                  <button
+                                    type="button"
+                                    className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent p-0.5 hover:bg-blue-50 disabled:opacity-50"
+                                    disabled={!id}
+                                    title="Alterar status"
+                                    aria-label="Alterar status do pedido"
+                                    onClick={() => openOrderStatusModal(item)}
+                                  >
+                                    <img
+                                      src="/refresh.png"
+                                      alt=""
+                                      aria-hidden="true"
                                       className="h-5 w-5 object-contain"
                                       style={{
                                         filter:
-                                          "brightness(0) saturate(100%) invert(34%) sepia(89%) saturate(1734%) hue-rotate(194deg) brightness(91%) contrast(101%)",
+                                          "brightness(0) saturate(100%) invert(55%) sepia(87%) saturate(1718%) hue-rotate(118deg) brightness(91%) contrast(101%)",
                                       }}
                                     />
                                   </button>
@@ -3170,7 +3686,7 @@ export default function GerenciaPage() {
                                     disabled={!selectedConfig.deletePath || !id}
                                     title={getDeleteActionLabel(selectedConfig.key)}
                                     aria-label={getDeleteActionLabel(selectedConfig.key)}
-                                    onClick={() => id && handleDelete(id)}
+                                    onClick={() => id && setPendingDeleteId(id)}
                                   >
                                     <img
                                       src={
@@ -3258,6 +3774,99 @@ export default function GerenciaPage() {
         </div>
       </main>
 
+      {filtersModalOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4">
+          <div
+            className="sigo-card flex max-h-[calc(100vh-4rem)] w-full max-w-3xl flex-col overflow-hidden bg-white"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="management-filters-title"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-4 bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4 text-white">
+              <div>
+                <h2 id="management-filters-title" className="mt-1 text-xl font-black text-white">
+                  Filtros de {selectedConfig.label}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center text-xl font-black text-white"
+                aria-label="Fechar filtros"
+                onClick={() => setFiltersModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="sigo-scrollbar grid flex-1 gap-4 overflow-y-auto bg-white p-5 sm:grid-cols-2">
+              {filterDefinitions.map((filter) => (
+                <label key={filter.key} className="sigo-label min-w-0">
+                  <span>{filter.label}</span>
+                  {filter.type === "select" ? (
+                    <select
+                      className="sigo-input bg-white"
+                      value={filterValues[filter.key] ?? ""}
+                      onChange={(event) =>
+                        setFilterValues((current) => ({
+                          ...current,
+                          [filter.key]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Todos</option>
+                      {(filter.options ?? []).map((option) => (
+                        <option key={String(option.value)} value={String(option.value)}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="sigo-input bg-white"
+                      type={filter.type ?? "search"}
+                      step={filter.key === "value" ? "0.01" : undefined}
+                      min={filter.type === "number" ? "0" : undefined}
+                      value={filterValues[filter.key] ?? ""}
+                      placeholder={`Filtrar por ${filter.label.toLowerCase()}`}
+                      onChange={(event) =>
+                        setFilterValues((current) => ({
+                          ...current,
+                          [filter.key]: event.target.value,
+                        }))
+                      }
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--sigo-border)] bg-white px-5 py-4">
+              <button
+                type="button"
+                className="sigo-button border-0 bg-transparent text-red-600 shadow-none"
+                onClick={() => setFiltersModalOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="sigo-button bg-white text-[var(--sigo-blue)]"
+                disabled={!Object.values(filterValues).some(Boolean)}
+                onClick={() => setFilterValues({})}
+              >
+                Limpar filtros
+              </button>
+              <button
+                type="button"
+                className="sigo-button sigo-button-primary"
+                onClick={() => setFiltersModalOpen(false)}
+              >
+                Aplicar filtros
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-950/60 p-4">
           <div className="sigo-card flex max-h-[calc(100vh-5rem)] w-full max-w-3xl flex-col overflow-hidden">
@@ -3319,7 +3928,7 @@ export default function GerenciaPage() {
                     type="button"
                     className={`sigo-button !rounded-[2px] ${
                       formMode === "create"
-                        ? "!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700"
+                        ? "sigo-modal-create-button !border-emerald-600 !bg-emerald-600 text-white hover:!bg-emerald-700"
                         : "sigo-button-primary"
                     }`}
                     disabled={
@@ -3418,6 +4027,51 @@ export default function GerenciaPage() {
                 {stockAdjustmentSaving ? "Salvando..." : "Adicionar"}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+      {statusOrderItem ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="order-status-title">
+          <div className="sigo-card w-full max-w-md overflow-hidden bg-white">
+            <header className="flex items-center justify-between bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4 text-white">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.1em] text-white/75">Pedido #{getItemId(statusOrderItem)}</p>
+                <h2 id="order-status-title" className="mt-1 text-lg font-black text-white">Alterar status</h2>
+              </div>
+              <button type="button" className="flex h-9 w-9 items-center justify-center bg-transparent text-2xl font-black text-white hover:bg-white/10" onClick={() => setStatusOrderItem(null)} aria-label="Fechar">×</button>
+            </header>
+            <div className="grid gap-4 p-5">
+              <label className="sigo-label">
+                <span>Novo status</span>
+                <select className="sigo-input bg-white" value={nextOrderStatus} onChange={(event) => setNextOrderStatus(Number(event.target.value))}>
+                  {workflowStatusOptions.map((option) => <option key={String(option.value)} value={Number(option.value)}>{option.label}</option>)}
+                </select>
+              </label>
+              {error ? <div className="sigo-error px-4 py-3 text-sm font-semibold">{error}</div> : null}
+            </div>
+            <footer className="flex justify-end gap-3 border-t border-[var(--sigo-border)] bg-white p-4">
+              <button type="button" className="sigo-button !border-transparent !bg-transparent !text-red-600 shadow-none hover:!bg-red-50" disabled={statusSaving} onClick={() => setStatusOrderItem(null)}>Cancelar</button>
+              <button type="button" className="sigo-button sigo-button-primary" disabled={statusSaving} onClick={() => void handleOrderStatusUpdate()}>
+                <img src="/refresh.png" alt="" aria-hidden="true" className="h-4 w-4 object-contain brightness-0 invert" />
+                {statusSaving ? "Atualizando..." : "Atualizar status"}
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+      {pendingDeleteId ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="sigo-card w-full max-w-md overflow-hidden bg-white">
+            <header className="bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] px-5 py-4 text-white">
+              <h2 className="text-lg font-black text-white">Confirmar ação</h2>
+            </header>
+            <div className="p-5 text-sm font-semibold text-[var(--sigo-text)]">
+              Deseja realmente {getDeleteActionLabel(selectedConfig.key).toLowerCase()} este registro? Esta ação pode não ser reversível.
+            </div>
+            <footer className="flex justify-end gap-3 border-t border-[var(--sigo-border)] p-4">
+              <button type="button" className="sigo-button" onClick={() => setPendingDeleteId(null)}>Cancelar</button>
+              <button type="button" className="sigo-button !border-red-600 !bg-red-600 !text-white" onClick={() => void handleDelete(pendingDeleteId)}>Confirmar</button>
+            </footer>
           </div>
         </div>
       ) : null}

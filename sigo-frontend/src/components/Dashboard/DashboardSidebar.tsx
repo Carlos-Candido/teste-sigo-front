@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { routes } from "@/navigation/routes";
+import { useAuth } from "@/hooks/useAuth";
+import { normalizeRole } from "@/lib/accessControl";
 
 const managementItems = [
   { key: "clientes", label: "Clientes", icon: "/do-utilizador.png" },
@@ -36,6 +38,8 @@ const SidebarIcon = ({ src }: { src: string }) => (
 
 export function DashboardSidebar({ activeEntity, availableEntities, onEntitySelect }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const { userRole } = useAuth();
+  const isOffice = normalizeRole(userRole) === "oficina";
   const visibleManagementItems = availableEntities
     ? managementItems.filter((item) => availableEntities.includes(item.key))
     : managementItems;
@@ -65,6 +69,12 @@ export function DashboardSidebar({ activeEntity, availableEntities, onEntitySele
           <SidebarIcon src="/elevacao.png" />
           <span>Análise</span>
         </Link>
+        {isOffice ? (
+          <Link className={itemClass(pathname === routes.audit)} href={routes.audit}>
+            <SidebarIcon src="/red-eyes.png" />
+            <span>Auditoria</span>
+          </Link>
+        ) : null}
         <Link className={itemClass(pathname === routes.profile)} href={routes.profile}>
           <SidebarIcon src="/lista-telefonica.png" />
           <span>Perfil</span>

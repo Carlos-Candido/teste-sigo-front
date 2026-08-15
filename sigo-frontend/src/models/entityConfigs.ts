@@ -31,6 +31,7 @@ const pedidoPecaTemplate = {
   IdPedido: 0,
   IdPeca: 0,
   Quantidade: 0,
+  ValorUnitario: 0,
   DataInstalacao: TODAY_ISO,
   Estado: "",
   Observacao: "",
@@ -129,8 +130,8 @@ const veiculoSearches: SearchConfig[] = [
     path: (value) => `/api/v1/veiculos/placa/${value}`,
   },
   {
-    label: "Tipo",
-    placeholder: "tipo",
+    label: "Modelo",
+    placeholder: "modelo",
     path: (value) => `/api/v1/veiculos/tipo/${value}`,
   },
 ];
@@ -190,7 +191,7 @@ export const entityConfigs: CrudConfig[] = [
       Cpf_Cnpj: "",
       Obs: "",
       razao: "",
-      DataNasc: TODAY_ISO,
+      DataNasc: "",
       Numero: 0,
       Rua: "",
       Cidade: "",
@@ -223,7 +224,7 @@ export const entityConfigs: CrudConfig[] = [
       Numero: 0,
       Rua: "",
       Cidade: "",
-      Cep: 0,
+      Cep: "",
       Bairro: "",
       Estado: "",
       Pais: "Brasil",
@@ -299,7 +300,7 @@ export const entityConfigs: CrudConfig[] = [
     template: {
       Id: 0,
       Nome: "",
-      Tipo: "",
+      EAN: "",
       Descricao: "",
       Valor: 0,
       Quantidade: 0,
@@ -366,7 +367,7 @@ export const entityConfigs: CrudConfig[] = [
     template: {
       Id: 0,
       NomeVeiculo: "",
-      TipoVeiculo: "",
+      ModeloVeiculo: "",
       PlacaVeiculo: "",
       ChassiVeiculo: "",
       AnoFab: 2020,
@@ -375,7 +376,6 @@ export const entityConfigs: CrudConfig[] = [
       Seguro: "",
       Cor: "",
       ClienteId: 0,
-      Status: 1,
     },
   },
 ];

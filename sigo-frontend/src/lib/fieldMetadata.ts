@@ -40,8 +40,10 @@ export const formatCpfCnpj = (value: unknown): string => {
   return digits.length > 11 ? formatCnpj(digits) : formatCpf(digits);
 };
 
-export const formatCep = (value: unknown): string =>
-  clampDigits(value, 8).replace(/^(\d{5})(\d)/, "$1-$2");
+export const formatCep = (value: unknown): string => {
+  const digits = clampDigits(value, 8);
+  return digits.replace(/^(\d{5})(\d)/, "$1-$2");
+};
 
 export const formatPhone = (value: unknown): string => {
   const digits = clampDigits(value, 11);

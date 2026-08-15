@@ -2,6 +2,7 @@ export type PedidoPeca = {
   IdPedido: number;
   IdPeca: number;
   Quantidade: number;
+  ValorUnitario: number;
   DataInstalacao: string;
   Estado: string;
   Observacao: string;
