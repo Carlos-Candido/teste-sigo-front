@@ -906,7 +906,16 @@ html[data-theme="dark"] img[src="/mais.png"] {
 img.sigo-record-add-icon {
   filter: brightness(0) saturate(100%) invert(42%) sepia(96%) saturate(1700%) hue-rotate(194deg) brightness(105%) contrast(101%) !important;
 }
+html body button.sigo-modal-create-button {
+  color: #ffffff !important;
+}
 html[data-theme="dark"] body button.sigo-modal-create-button {
+  color: #000000 !important;
+}
+html body button.sigo-modal-create-button > .sigo-modal-create-label {
+  color: #ffffff !important;
+}
+html[data-theme="dark"] body button.sigo-modal-create-button > .sigo-modal-create-label {
   color: #000000 !important;
 }
 html[data-theme="dark"] header.sticky .sigo-navbar-profile {

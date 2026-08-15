@@ -4079,11 +4079,15 @@ export default function GerenciaPage() {
                         className="h-4 w-4 object-contain brightness-0 invert"
                       />
                     ) : null}
-                    {isLoading
-                      ? "Salvando..."
-                      : formMode === "edit"
-                        ? "Salvar alterações"
-                        : "Criar"}
+                    {formMode === "create" ? (
+                      <span className="sigo-modal-create-label">
+                        {isLoading ? "Salvando..." : "Criar"}
+                      </span>
+                    ) : isLoading ? (
+                      "Salvando..."
+                    ) : (
+                      "Salvar alterações"
+                    )}
                   </button>
                 ) : null}
               </div>
