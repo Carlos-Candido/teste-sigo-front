@@ -37,7 +37,7 @@ type CadastroForm = {
   Estado: string;
   Pais: string;
   Complemento: string;
-  Sexo: number;
+  Sexo: number | "";
 };
 
 type CadastroMode = "cliente" | "oficina";
@@ -67,7 +67,7 @@ const buildDefaultForm = (): CadastroForm => ({
   Estado: "",
   Pais: "Brasil",
   Complemento: "",
-  Sexo: 3,
+  Sexo: "",
 });
 
 const getClienteValidationError = (form: CadastroForm): string | null => {
@@ -83,8 +83,9 @@ const getClienteValidationError = (form: CadastroForm): string | null => {
     String(today.getDate()).padStart(2, "0"),
   ].join("-");
 
-  if (onlyDigits(form.Documento).length !== 11) {
-    return "O CPF deve conter exatamente 11 dígitos.";
+  const documentLength = onlyDigits(form.Documento).length;
+  if (![11, 14].includes(documentLength)) {
+    return "O CPF deve ter 11 dígitos ou o CNPJ deve ter 14 dígitos.";
   }
   if (!name || name.length > 100) {
     return "O nome é obrigatório e deve ter no máximo 100 caracteres.";
@@ -213,8 +214,10 @@ export default function CadastroPage() {
   const isOficinaMode = cadastroMode === "oficina";
   const formData = forms[cadastroMode];
   const lastCepLookup = lastCepLookups[cadastroMode];
-  const documentLabel = isOficinaMode ? "CNPJ" : "CPF";
-  const documentPlaceholder = isOficinaMode
+  const clienteDocumentLength = onlyDigits(formData.Documento).length;
+  const isClienteCnpj = !isOficinaMode && clienteDocumentLength > 11;
+  const documentLabel = isOficinaMode ? "CNPJ" : isClienteCnpj ? "CNPJ" : "CPF";
+  const documentPlaceholder = isOficinaMode || isClienteCnpj
     ? "00.000.000/0000-00"
     : "000.000.000-00";
 
@@ -230,7 +233,7 @@ export default function CadastroPage() {
   const updateField = (key: keyof CadastroForm, value: string) => {
     const maskedValue =
       key === "Documento"
-        ? isOficinaMode
+        ? isOficinaMode || onlyDigits(value).length > 11
           ? formatCnpj(value)
           : formatCpf(value)
         : key === "Telefone"
@@ -275,7 +278,7 @@ export default function CadastroPage() {
     return () => {
       isMounted = false;
     };
-  }, [baseUrl, cadastroMode, formData.Cep, lastCepLookup]);
+  }, [baseUrl, cadastroMode, formData.Cep]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -440,8 +443,8 @@ export default function CadastroPage() {
         estado: formData.Estado,
         pais: formData.Pais,
         complemento: formData.Complemento,
-        sexo: formData.Sexo,
-        tipoCliente: 1,
+        sexo: documentDigits.length === 14 ? 3 : Number(formData.Sexo),
+        tipoCliente: documentDigits.length === 14 ? 2 : 1,
         telefones: clienteTelefones.map((telefone) => ({
           id: 0,
           numero: telefone.Numero,
@@ -582,8 +585,10 @@ export default function CadastroPage() {
                   value={formData.Documento}
                   onChange={(value) => updateField("Documento", value)}
                   placeholder={documentPlaceholder}
+                  maxLength={18}
+                  inputMode="numeric"
                   helperText={
-                    isOficinaMode
+                    isOficinaMode || isClienteCnpj
                       ? "Digite os 14 números do CNPJ; a pontuação é aplicada automaticamente."
                       : "Digite os 11 números do CPF; a pontuação é aplicada automaticamente."
                   }
@@ -611,29 +616,33 @@ export default function CadastroPage() {
                     value={formData.DataNasc}
                     onChange={(value) => updateField("DataNasc", value)}
                     type="date"
+                    max="9999-12-31"
                   />
                 </div>
               ) : null}
 
               {!isOficinaMode ? (
-                <div className="grid items-start gap-4 md:grid-cols-2">
-                  <TextInput
-                    label="Observação"
-                    value={formData.Obs}
-                    onChange={(value) => updateField("Obs", value)}
-                  />
-                  <TextInput
-                    label="Razão social"
-                    value={formData.razao}
-                    onChange={(value) => updateField("razao", value)}
-                    helperText="Opcional."
-                  />
+                <div className="grid items-start gap-4">
+                  {!isClienteCnpj ? (
+                    <TextInput
+                      label="Observação"
+                      value={formData.Obs}
+                      onChange={(value) => updateField("Obs", value)}
+                    />
+                  ) : (
+                    <TextInput
+                      label="Razão social"
+                      value={formData.razao}
+                      onChange={(value) => updateField("razao", value)}
+                      helperText="Opcional."
+                    />
+                  )}
                 </div>
               ) : null}
 
               <div className="grid gap-4 md:grid-cols-3">
                 <NumberField
-                  label="Número"
+                  label="Número da residência"
                   value={formData.Numero}
                   onChange={(value) => updateNumberField("Numero", value)}
                 />

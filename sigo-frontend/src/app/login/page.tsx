@@ -28,6 +28,12 @@ export default function LoginPage() {
   const [accountType, setAccountType] = useState<"cliente" | "funcionario" | "oficina">("funcionario");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const identifierLabel =
+    accountType === "oficina"
+      ? "E-mail"
+      : accountType === "cliente"
+        ? "CPF ou CNPJ"
+        : "CPF";
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -111,10 +117,10 @@ export default function LoginPage() {
               </select>
             </label>
             <TextInput
-              label="CPF, CNPJ ou E-mail"
+              label={identifierLabel}
               value={identifier}
               onChange={setIdentifier}
-              placeholder="CPF, CNPJ ou E-mail"
+              placeholder={identifierLabel}
             />
             <TextInput
               label="Senha"

@@ -175,7 +175,7 @@ export default function CadastroOficinaPage() {
     return () => {
       isMounted = false;
     };
-  }, [baseUrl, formData.Cep, lastCepLookup]);
+  }, [baseUrl, formData.Cep]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -295,7 +295,7 @@ export default function CadastroOficinaPage() {
 
               <div className="grid gap-4 md:grid-cols-3">
                 <NumberField
-                  label="Numero"
+                  label="Número da residência"
                   value={formData.Numero}
                   onChange={(value) => updateNumberField("Numero", value)}
                 />

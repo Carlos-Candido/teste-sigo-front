@@ -9,6 +9,9 @@ type TextInputProps = {
   className?: string;
   inputClassName?: string;
   disabled?: boolean;
+  max?: string;
+  maxLength?: number;
+  inputMode?: "text" | "numeric" | "decimal" | "tel" | "email" | "url" | "search" | "none";
 };
 
 export function TextInput({
@@ -22,6 +25,9 @@ export function TextInput({
   className = "",
   inputClassName = "",
   disabled = false,
+  max,
+  maxLength,
+  inputMode,
 }: TextInputProps) {
   return (
     <label className={`sigo-label ${className}`.trim()}>
@@ -34,6 +40,9 @@ export function TextInput({
         placeholder={placeholder}
         aria-invalid={Boolean(error)}
         disabled={disabled}
+        max={max}
+        maxLength={maxLength}
+        inputMode={inputMode}
       />
       {error ? (
         <span className="text-xs font-semibold text-[var(--sigo-danger)]">

@@ -253,6 +253,16 @@ const normalizeSpecialTextField = (key: string, value: string): string => {
   if (normalized === "seguro") {
     return onlyDigits(value).slice(0, 100);
   }
+  if (normalized === "tempodec") {
+    const digits = onlyDigits(value).slice(0, 4);
+    if (digits.length <= 2) return digits;
+    const hours = digits.slice(0, 2);
+    const rawMinutes = digits.slice(2);
+    const minutes = rawMinutes.length === 2
+      ? String(Math.min(60, Number(rawMinutes))).padStart(2, "0")
+      : rawMinutes;
+    return `${hours}:${minutes}`;
+  }
   return value;
 };
 
@@ -310,6 +320,12 @@ const normalizePieceFormRecord = (record: FormValue): FormValue => {
 const getDeleteActionLabel = (entityKey: string): string =>
   entityKey === "clientes" ? "Inativar" : "Excluir";
 
+const isClientOfficeLinkActive = (item: FormValue): boolean => {
+  const value = getRecordValue(item, "VinculoAtivo");
+  if (value === undefined || value === null || value === "") return true;
+  return value === true || String(value).trim().toLowerCase() === "true" || String(value).trim() === "1";
+};
+
 const getVehicleValidationError = (data: FormValue): string | null => {
   const plate = String(getRecordValue(data, "PlacaVeiculo") ?? "").toUpperCase();
   const chassis = String(getRecordValue(data, "ChassiVeiculo") ?? "").toUpperCase();
@@ -354,7 +370,7 @@ const getFormValidationError = (
     if (!text(key)) return `Preencha o campo ${formatFieldLabel(key)}.`;
   }
   if (entityKey === "clientes" && !firstText("Cpf_Cnpj", "CpfCnpj", "Cpf")) {
-    return "Preencha o campo CPF.";
+    return "Preencha o campo CPF ou CNPJ.";
   }
   const cepKey = Object.keys(data).find((key) => normalizeFieldKey(key) === "cep");
   if (cepKey && onlyDigits(data[cepKey]).length !== 8) {
@@ -373,9 +389,26 @@ const getFormValidationError = (
         ? firstText("Cpf_Cnpj", "CpfCnpj", "Cpf")
         : getRecordValue(data, "Cpf")
     );
-    if (cpf.length !== 11) return "Informe um CPF válido com 11 dígitos.";
+    if (entityKey === "clientes" && ![11, 14].includes(cpf.length)) {
+      return "Informe um CPF válido com 11 dígitos ou CNPJ com 14 dígitos.";
+    }
+    if (entityKey === "funcionarios" && cpf.length !== 11) {
+      return "Informe um CPF válido com 11 dígitos.";
+    }
     const email = text("Email");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Informe um e-mail válido.";
+  }
+  if (entityKey === "clientes") {
+    const birthDate = firstText("DataNasc");
+    if (birthDate && Number(birthDate.slice(0, 4)) > 9999) {
+      return "O ano da data de nascimento deve ser no máximo 9999.";
+    }
+  }
+  if (entityKey === "veiculos") {
+    const mileage = Number(getRecordValue(data, "Quilometragem"));
+    if (!Number.isFinite(mileage) || mileage < 0 || mileage > 9999999) {
+      return "A quilometragem deve estar entre 0 e 9.999.999 km.";
+    }
   }
   if (entityKey === "veiculos" && !positiveId("ClienteId")) {
     return "Selecione o cliente do veículo.";
@@ -395,6 +428,19 @@ const getFormValidationError = (
       if (Number(getRecordValue(line, "ValorUnitario")) < 0) return "O valor unitário da peça não pode ser negativo.";
     }
   }
+  const hasInvalidElapsedTime = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(hasInvalidElapsedTime);
+    if (!isPlainObject(value)) return false;
+    return Object.entries(value).some(([key, fieldValue]) =>
+      normalizeFieldKey(key) === "tempodec"
+        ? String(fieldValue ?? "").trim().length > 0 &&
+          !/^\\d{2}:(?:[0-5]\\d|60)$/.test(String(fieldValue))
+        : hasInvalidElapsedTime(fieldValue)
+    );
+  };
+  if (hasInvalidElapsedTime(data)) {
+    return "Informe o tempo decorrido no formato HH:MM, com minutos entre 00 e 60.";
+  }
   if (["servicos", "pecas"].includes(entityKey) && Number(getRecordValue(data, "Valor")) < 0) {
     return "O valor não pode ser negativo.";
   }
@@ -412,11 +458,11 @@ const fieldLabels: Record<string, string> = {
   valorunitario: "Valor unitário",
   cpf: "CPF",
   cnpj: "CNPJ",
-  cpfcnpj: "CPF",
+  cpfcnpj: "CPF ou CNPJ",
   obs: "Observação",
   razao: "Razão",
   datanasc: "Data de nascimento",
-  numero: "Número",
+  numero: "Número da residência",
   rua: "Rua",
   cidade: "Cidade",
   cep: "CEP",
@@ -437,7 +483,7 @@ const fieldLabels: Record<string, string> = {
   funcionarioservicos: "Funcionários do serviço",
   idfuncionario: "Funcionário",
   idservico: "Serviço",
-  tempodec: "Tempo decimal",
+  tempodec: "Tempo decorrido",
   tipo: "Tipo",
   ean: "EAN",
   quantidade: "Quantidade",
@@ -890,6 +936,30 @@ const getFieldOptions = (
   return getEnumOptions(key);
 };
 
+const clearCreateSelectValues = (
+  value: unknown,
+  entityKey: string,
+  path: Array<string | number> = []
+): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      clearCreateSelectValues(item, entityKey, [...path, index])
+    );
+  }
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, fieldValue]) => {
+        const fieldPath = [...path, key];
+        if (!isPlainObject(fieldValue) && !Array.isArray(fieldValue) && getFieldOptions(key, fieldPath, entityKey)) {
+          return [key, ""];
+        }
+        return [key, clearCreateSelectValues(fieldValue, entityKey, fieldPath)];
+      })
+    );
+  }
+  return value;
+};
+
 const getDisplayKeys = (
   template: Record<string, unknown>,
   entityKey: string
@@ -916,7 +986,7 @@ const tableColumnsByEntity: Record<string, TableColumn[]> = {
   clientes: [
     { key: "Id", label: "ID" },
     { key: "Nome", label: "Nome" },
-    { key: "Cpf_Cnpj", label: "CPF" },
+    { key: "Cpf_Cnpj", label: "CPF/CNPJ" },
     { key: "VinculoAtivo", label: "Status", status: "situacao" },
   ],
   veiculos: [
@@ -1816,7 +1886,12 @@ export default function GerenciaPage() {
     setManualTotalEnabled(false);
     setManualTotalValue(0);
     setFormData(
-      applyLoggedOficina(createEmptyListForm(getCreateTemplate(selectedConfig)))
+      applyLoggedOficina(
+        clearCreateSelectValues(
+          createEmptyListForm(getCreateTemplate(selectedConfig)),
+          selectedConfig.key
+        ) as FormValue
+      )
     );
     setImageFiles([]);
     setSavedImages([]);
@@ -1883,7 +1958,12 @@ export default function GerenciaPage() {
     setManualTotalEnabled(false);
     setManualTotalValue(0);
     setFormData(
-      applyLoggedOficina(createEmptyListForm(getCreateTemplate(selectedConfig)))
+      applyLoggedOficina(
+        clearCreateSelectValues(
+          createEmptyListForm(getCreateTemplate(selectedConfig)),
+          selectedConfig.key
+        ) as FormValue
+      )
     );
     setImageFiles([]);
     setSavedImages([]);
@@ -2159,6 +2239,9 @@ export default function GerenciaPage() {
       selectedConfig.key === "clientes" && isPlainObject(rawCreatePayload)
         ? {
             ...rawCreatePayload,
+            ...(onlyDigits(
+              getRecordValue(formData, "Cpf_Cnpj") ?? getRecordValue(formData, "CpfCnpj") ?? getRecordValue(formData, "Cpf")
+            ).length === 14 ? { sexo: 3 } : {}),
             telefones: Array.isArray(rawCreatePayload.telefones)
               ? rawCreatePayload.telefones.filter(
                   (telefone) =>
@@ -2367,6 +2450,15 @@ export default function GerenciaPage() {
             ),
           }
         : rawUpdatePayload;
+    if (
+      selectedConfig.key === "clientes" &&
+      isPlainObject(updatePayload) &&
+      onlyDigits(
+        getRecordValue(formData, "Cpf_Cnpj") ?? getRecordValue(formData, "CpfCnpj") ?? getRecordValue(formData, "Cpf")
+      ).length === 14
+    ) {
+      updatePayload = { ...updatePayload, Sexo: 3 };
+    }
     updatePayload = applyPedidoTotals(updatePayload);
     if (selectedConfig.key === "pecas") {
       updatePayload = applyPieceStockTotal(updatePayload);
@@ -2531,16 +2623,21 @@ export default function GerenciaPage() {
       normalized.includes("cnpj")
     ) {
       nextValue =
-        selectedConfig.key === "clientes" && normalized.includes("cpfcnpj")
-          ? formatCpf(value)
+        selectedConfig.key === "clientes" &&
+          (normalized.includes("cpfcnpj") || (formMode === "create" && normalized === "cpf"))
+          ? maskFieldValue("Cpf_Cnpj", value)
           : maskFieldValue(key, value);
     } else if (normalized === "ean") {
       nextValue = onlyDigits(value).slice(0, 13);
-    } else if (["placaveiculo", "chassiveiculo", "seguro"].includes(normalized)) {
+    } else if (["placaveiculo", "chassiveiculo", "seguro", "tempodec"].includes(normalized)) {
       nextValue = normalizeSpecialTextField(key, value);
     } else if (typeof templateValue === "number") {
       const parsed = Number(value);
-      nextValue = Number.isNaN(parsed) ? templateValue : parsed;
+      nextValue = Number.isNaN(parsed)
+        ? templateValue
+        : normalized === "quilometragem"
+          ? Math.min(9999999, Math.max(0, parsed))
+          : parsed;
     } else {
       const maskedValue = maskFieldValue(key, value);
       nextValue =
@@ -2824,6 +2921,14 @@ export default function GerenciaPage() {
         return null;
       }
 
+      if (selectedConfig.key === "clientes" && path.length === 0) {
+        const documentLength = onlyDigits(
+          getRecordValue(value, "Cpf_Cnpj") ?? getRecordValue(value, "CpfCnpj") ?? getRecordValue(value, "Cpf")
+        ).length;
+        if (normalizedFieldKey === "razao" && documentLength !== 14) return null;
+        if (["obs", "observacao", "sexo"].includes(normalizedFieldKey) && documentLength === 14) return null;
+      }
+
       if (
         selectedConfig.key === "pedidos" &&
         path.length === 0 &&
@@ -2971,7 +3076,14 @@ export default function GerenciaPage() {
                   type="button"
                   className="sigo-button min-h-9 px-3 text-xs"
                   onClick={() => {
-                    const nextItems = [...items, cloneTemplate(itemTemplate)];
+                    const nextItems = [
+                      ...items,
+                      clearCreateSelectValues(
+                        cloneTemplate(itemTemplate),
+                        selectedConfig.key,
+                        fieldPath
+                      ),
+                    ];
                     setFormData((prev) =>
                       setAtPath(prev, fieldPath, nextItems) as FormValue
                     );
@@ -3087,8 +3199,9 @@ export default function GerenciaPage() {
         normalizeFieldKey(key).includes("cpf") ||
         normalizeFieldKey(key).includes("cnpj")
           ? selectedConfig.key === "clientes" &&
-            normalizeFieldKey(key).includes("cpfcnpj")
-            ? formatCpf(normalizedValue)
+            (normalizeFieldKey(key).includes("cpfcnpj") ||
+              (formMode === "create" && normalizeFieldKey(key) === "cpf"))
+            ? maskFieldValue("Cpf_Cnpj", normalizedValue)
             : maskFieldValue(key, normalizedValue)
           : String(normalizedValue);
       const fieldOptions = getFieldOptions(key, path, selectedConfig.key);
@@ -3212,7 +3325,7 @@ export default function GerenciaPage() {
 
       return (
         <label key={fieldPath.join(".")} className="sigo-label rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3">
-          <span>{selectedConfig.key === "funcionarios" && normalizeFieldKey(key) === "senha" ? (formMode === "edit" ? "Redefinição de senha" : "Senha inicial") : formatFieldLabel(key)}</span>
+          <span>{isPhoneNumberField(key, fieldPath) ? "Telefone" : selectedConfig.key === "clientes" && formMode === "create" && normalizeFieldKey(key) === "cpf" ? "CPF ou CNPJ" : selectedConfig.key === "funcionarios" && normalizeFieldKey(key) === "senha" ? (formMode === "edit" ? "Redefinição de senha" : "Senha inicial") : formatFieldLabel(key)}</span>
           {fieldOptions ? (
             <select
               className="sigo-input"
@@ -3247,8 +3360,10 @@ export default function GerenciaPage() {
                     ? "0,00"
                     : normalizeFieldKey(key) === "ean"
                       ? "00000000 ou 0000000000000"
+                    : normalizeFieldKey(key) === "tempodec"
+                      ? "00:00"
                     : normalizeFieldKey(key).includes("cpf")
-                    ? "000.000.000-00"
+                    ? (normalizeFieldKey(key).includes("cpfcnpj") || (selectedConfig.key === "clientes" && formMode === "create" && normalizeFieldKey(key) === "cpf") ? "000.000.000-00 ou 00.000.000/0000-00" : "000.000.000-00")
                     : normalizeFieldKey(key) === "cep"
                       ? "00000-000"
                       : normalizeFieldKey(key) === "placaveiculo"
@@ -3258,8 +3373,11 @@ export default function GerenciaPage() {
                           : undefined
                 }
                 maxLength={
-                  normalizeFieldKey(key).includes("cpf")
-                    ? 14
+                  normalizeFieldKey(key).includes("cpfcnpj") ||
+                  (selectedConfig.key === "clientes" && formMode === "create" && normalizeFieldKey(key) === "cpf")
+                    ? 18
+                    : normalizeFieldKey(key).includes("cpf")
+                      ? 14
                     : normalizeFieldKey(key) === "cep"
                       ? 9
                       : normalizeFieldKey(key) === "placaveiculo"
@@ -3270,6 +3388,8 @@ export default function GerenciaPage() {
                             ? 100
                             : normalizeFieldKey(key) === "ean"
                               ? 13
+                            : normalizeFieldKey(key) === "tempodec"
+                              ? 5
                             : undefined
                 }
                 pattern={
@@ -3279,12 +3399,14 @@ export default function GerenciaPage() {
                       ? "[A-HJ-NPR-Z0-9]{17}"
                       : normalizeFieldKey(key) === "seguro"
                         ? "[0-9]{0,100}"
+                      : normalizeFieldKey(key) === "tempodec"
+                        ? "[0-9]{2}:(?:[0-5][0-9]|60)"
                         : undefined
                 }
                 inputMode={
                   ["valor", "valorunitario"].includes(normalizeFieldKey(key))
                     ? "decimal"
-                    : ["ean", "seguro"].includes(normalizeFieldKey(key))
+                    : ["ean", "seguro", "tempodec"].includes(normalizeFieldKey(key))
                       ? "numeric"
                     : normalizeFieldKey(key).includes("cpf") ||
                         normalizeFieldKey(key).includes("cnpj") ||
@@ -3292,6 +3414,14 @@ export default function GerenciaPage() {
                       ? "numeric"
                       : undefined
                 }
+                max={
+                  normalizeFieldKey(key) === "datanasc"
+                    ? "9999-12-31"
+                    : normalizeFieldKey(key) === "quilometragem"
+                      ? 9999999
+                      : undefined
+                }
+                min={normalizeFieldKey(key) === "quilometragem" ? 0 : undefined}
                 step={
                   ["valor", "valorunitario"].includes(normalizeFieldKey(key))
                     ? "0.01"
@@ -3536,6 +3666,8 @@ export default function GerenciaPage() {
                       {paginatedItems.map((item, index) => {
                         const id = getItemId(item);
                         const rowIndex = pageStartIndex + index;
+                        const clientLinkActive =
+                          selectedConfig.key !== "clientes" || isClientOfficeLinkActive(item);
                         return (
                           <tr
                             className="h-10 cursor-pointer"
@@ -3659,6 +3791,7 @@ export default function GerenciaPage() {
                                   </button>
                                 ) : null}
                                 <button
+                                  hidden={!clientLinkActive}
                                   type="button"
                                   className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent p-0.5 hover:bg-[var(--sigo-surface-soft)] disabled:opacity-50"
                                   disabled={!id}
@@ -3681,6 +3814,7 @@ export default function GerenciaPage() {
                                 </button>
                                 {selectedCapability?.canDelete ? (
                                   <button
+                                    hidden={!clientLinkActive}
                                       type="button"
                                       className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent p-0.5 hover:bg-red-50 disabled:opacity-50"
                                     disabled={!selectedConfig.deletePath || !id}
