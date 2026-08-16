@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-import { routes } from "@/navigation/routes";
+import { ClientRegistrationForm } from "@/features/registration/ClientRegistrationForm";
 
-export default function CadastroClientePage() {
-  redirect(routes.register);
+export default function ClientRegistrationPage() {
+  return <ClientRegistrationForm />;
 }

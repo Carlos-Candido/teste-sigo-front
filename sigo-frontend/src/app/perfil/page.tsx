@@ -7,6 +7,7 @@ import { DashboardSidebar } from "@/components/Dashboard/DashboardSidebar";
 import { SigoLoader } from "@/components/Loading/SigoLoader";
 import { NavBar } from "@/components/Sidebar/NavBar";
 import { ProtectedRoute } from "@/components/Auth/RouteGuards";
+import { ProfileTypeIcon, profileTypeInfo } from "@/components/Profile/ProfileTypeIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useMinimumLoading } from "@/hooks/useMinimumLoading";
 import { fetchJson } from "@/lib/api";
@@ -15,6 +16,7 @@ import {
   getProfileEditableFields,
   getProfileEntityKey,
   isAllowedField,
+  isProfileFieldVisible,
   normalizeRole,
 } from "@/lib/accessControl";
 import {
@@ -39,11 +41,14 @@ type FormValue = Record<string, unknown>;
 
 const fieldLabels: Record<string, string> = {
   nome: "Nome",
-  email: "Email",
+  email: "E-mail",
+  cpf: "CPF",
+  cnpj: "CNPJ",
+  cpfcnpj: "CPF/CNPJ",
   senha: "Senha",
   cargo: "Cargo",
-  obs: "Observacao",
-  razao: "Razao social",
+  obs: "Observação",
+  razao: "Razão social",
   datanasc: "Data de nascimento",
   numero: "Número",
   rua: "Rua",
@@ -55,6 +60,7 @@ const fieldLabels: Record<string, string> = {
   complemento: "Complemento",
   sexo: "Sexo",
   tipocliente: "Tipo de cliente",
+  situacao: "Situação",
   telefones: "Telefones",
   ddd: "DDD",
 };
@@ -308,6 +314,12 @@ export default function PerfilPage() {
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [lastCepLookup, setLastCepLookup] = useState("");
+  const isCompanyClient =
+    normalizedRole === "cliente" &&
+    (Number(getRecordValue(formData, "TipoCliente")) === 2 ||
+      onlyDigits(getRecordValue(formData, "Cpf_Cnpj")).length === 14);
+  const profileName = String(getRecordValue(formData, "Nome") ?? fullName ?? "").trim();
+  const profileInfo = normalizedRole === "unknown" ? null : profileTypeInfo[normalizedRole];
 
   const authHeaders = useMemo(
     () => (token ? { Authorization: `Bearer ${token}` } : undefined),
@@ -470,6 +482,14 @@ export default function PerfilPage() {
         if (isTopLevel && !isAllowedField(editableFields, key)) return;
 
         const normalized = normalizeFieldKey(key);
+        if (
+          isTopLevel &&
+          normalizedRole === "cliente" &&
+          ((isCompanyClient && normalized === "obs") ||
+            (!isCompanyClient && normalized === "razao"))
+        ) {
+          return;
+        }
         if (isOwnIdField(key)) {
           if (isPhonePath(path)) {
             const rawId = getRecordValue(recordValue, key);
@@ -592,8 +612,9 @@ export default function PerfilPage() {
     path: Array<string | number>
   ) => {
     const options = getFieldOptions(key);
-    const isPasswordField = normalizeFieldKey(key).includes("senha");
     const isCountryField = normalizeFieldKey(key) === "pais";
+    const topLevelKey = String(path[0] ?? key);
+    const canEditField = isAllowedField(editableFields, topLevelKey);
     const normalizedValue =
       isCountryField
         ? "Brasil"
@@ -612,14 +633,14 @@ export default function PerfilPage() {
     const fieldDisplayValue =
       phoneDisplayValue ?? displayValue(key, normalizedValue, path);
 
-    return (
-      <label
-        key={path.join(".")}
-        className="sigo-label rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3"
-      >
-        <span>{formatFieldLabel(key)}</span>
-        {isEditing ? (
-          options ? (
+    if (isEditing && canEditField) {
+      return (
+        <label
+          key={path.join(".")}
+          className="sigo-label rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3"
+        >
+          <span>{formatFieldLabel(key)}</span>
+          {options ? (
             <select
               className="sigo-input"
               value={String(normalizedValue)}
@@ -636,23 +657,27 @@ export default function PerfilPage() {
             <input
               className="sigo-input"
               type={getInputType(key, templateValue)}
-              value={
-                isPasswordField
-                  ? String(value ?? "")
-                  : fieldDisplayValue
-              }
+              value={fieldDisplayValue}
               disabled={isCountryField}
               onChange={(event) => updateField(path, templateValue, event.target.value)}
             />
-          )
-        ) : (
-          <span className="min-h-11 rounded-lg border border-[var(--sigo-border)] bg-white px-3 py-3 text-sm font-bold text-[var(--sigo-text)]">
-            {isPasswordField
-              ? "Não alterada"
-              : fieldDisplayValue || "-"}
-          </span>
-        )}
-      </label>
+          )}
+        </label>
+      );
+    }
+
+    return (
+      <div
+        key={path.join(".")}
+        className="grid gap-2 rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-3"
+      >
+        <p className="text-sm font-bold text-[var(--sigo-text)]">
+          {formatFieldLabel(key)}
+        </p>
+        <p className="min-h-11 rounded-lg border border-[var(--sigo-border)] bg-white px-3 py-3 text-sm font-bold text-[var(--sigo-text)]">
+          {fieldDisplayValue || "-"}
+        </p>
+      </div>
     );
   };
 
@@ -664,6 +689,7 @@ export default function PerfilPage() {
   ) => {
     const items = Array.isArray(value) ? value : [];
     const itemTemplate = templateValue[0] as FormValue | undefined;
+    const canEditArray = isAllowedField(editableFields, String(path[0] ?? key));
 
     return (
       <div
@@ -674,7 +700,7 @@ export default function PerfilPage() {
           <p className="text-sm font-extrabold text-[var(--sigo-text)]">
             {formatFieldLabel(key)}
           </p>
-          {isEditing && itemTemplate ? (
+          {isEditing && canEditArray && itemTemplate ? (
             <button
               type="button"
               className="sigo-button min-h-9 px-3 text-xs"
@@ -699,10 +725,10 @@ export default function PerfilPage() {
               className="rounded-lg border border-[var(--sigo-border)] bg-[var(--sigo-surface-soft)] p-4"
             >
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm font-bold text-[var(--sigo-blue-deep)]">
+                <p className="text-sm font-bold text-[var(--sigo-blue)]">
                   Telefone {index + 1}
                 </p>
-                {isEditing ? (
+                {isEditing && canEditArray ? (
                   <button
                     type="button"
                     className="text-sm font-bold text-[var(--sigo-danger)]"
@@ -743,7 +769,9 @@ export default function PerfilPage() {
     if (!config) return null;
 
     return Object.keys(config.template)
-      .filter((key) => isAllowedField(editableFields, key))
+      .filter((key) =>
+        isProfileFieldVisible(key, normalizedRole, isCompanyClient)
+      )
       .map((key) => {
         const templateValue = config.template[key];
         const value = getRecordValue(formData, key);
@@ -762,14 +790,29 @@ export default function PerfilPage() {
           {normalizedRole !== "cliente" ? <DashboardSidebar /> : null}
           <div className="grid min-w-0 gap-6">
           <section className="sigo-card overflow-hidden">
-            <div className="flex flex-col gap-3 bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] p-6 text-white sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-100">
-                  Perfil
-                </p>
-                <h1 className="mt-3 text-3xl font-black text-white lg:text-4xl">
-                  {fullName || "Minha conta"}
-                </h1>
+            <div className="flex flex-col gap-5 bg-[linear-gradient(135deg,var(--sigo-blue-deep),var(--sigo-blue))] p-6 text-white sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
+                {profileInfo && normalizedRole !== "unknown" ? (
+                  <span className="flex h-28 w-28 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/10 p-3 text-white shadow-lg">
+                    <ProfileTypeIcon role={normalizedRole} />
+                  </span>
+                ) : null}
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-100">
+                    Perfil autenticado
+                  </p>
+                  <h1 className="mt-2 break-words text-3xl font-black text-white lg:text-4xl">
+                    {profileName || "Minha conta"}
+                  </h1>
+                  {profileInfo ? (
+                    <div className="mt-3">
+                      <p className="text-lg font-black text-white">Tipo de perfil: {profileInfo.label}</p>
+                      <p className="mt-1 max-w-xl text-sm font-semibold leading-6 text-blue-100">
+                        {profileInfo.description}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
               </div>
               {canManageOwnProfile ? (
                 <div className="flex flex-wrap gap-2">

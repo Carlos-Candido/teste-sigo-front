@@ -222,6 +222,16 @@ textarea:disabled {
   opacity: 0.68;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-duration: 0.01ms;
+  }
+}
+
 .sigo-page {
   min-height: 0;
   display: flex;
@@ -486,7 +496,7 @@ textarea:disabled {
   border: 1px solid var(--sigo-border);
   background: var(--sigo-surface);
   padding: 0 1rem;
-  color: var(--sigo-blue-deep);
+  color: var(--sigo-blue);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
@@ -577,6 +587,13 @@ textarea:disabled {
   border-radius: 8px;
   background: var(--sigo-danger-soft);
   color: var(--sigo-danger);
+}
+
+.sigo-success {
+  border: 1px solid rgba(18, 128, 92, 0.28);
+  border-radius: 8px;
+  background: #eaf8f2;
+  color: var(--sigo-success);
 }
 
 .sigo-table {
@@ -691,6 +708,12 @@ html[data-theme="dark"] {
   background: var(--sigo-page);
   color-scheme: dark;
   scrollbar-color: #64748b var(--sigo-page);
+}
+
+html[data-theme="dark"] .sigo-success {
+  border-color: rgba(141, 240, 206, 0.42);
+  background: #153f36;
+  color: #8df0ce;
 }
 
 html[data-theme="dark"] body {

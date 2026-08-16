@@ -51,12 +51,10 @@ export function DashboardSidebar({ activeEntity, availableEntities, onEntitySele
   return (
     <aside className="sigo-dashboard-sidebar self-stretch">
       <nav className="sigo-dashboard-sidebar-nav grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1" aria-label={isEmployee ? "Navegação do funcionário" : "Navegação da oficina"}>
-        {!isEmployee ? (
-          <Link className={itemClass(pathname === routes.dashboard)} href={routes.dashboard}>
-            <SidebarIcon src="/casa.png" />
-            <span>Dashboard</span>
-          </Link>
-        ) : null}
+        <Link className={itemClass(pathname === routes.dashboard)} href={routes.dashboard}>
+          <SidebarIcon src="/casa.png" />
+          <span>Dashboard</span>
+        </Link>
         {visibleManagementItems.map((item) => {
           const active = pathname === routes.management && activeEntity === item.key;
           return (

@@ -1,5 +1,9 @@
 import type { CrudConfig } from "@/components/CrudPanel";
-import { normalizeFieldKey } from "@/lib/fieldMetadata";
+import {
+  isOwnIdField,
+  isRelationIdField,
+  normalizeFieldKey,
+} from "@/lib/fieldMetadata";
 
 export type RoleKey = "cliente" | "oficina" | "funcionario" | "unknown";
 
@@ -170,6 +174,29 @@ export const getProfileEditableFields = (
 export const isAllowedField = (fields: string[], key: string): boolean => {
   const normalizedKey = normalizeFieldKey(key);
   return fields.some((field) => normalizeFieldKey(field) === normalizedKey);
+};
+
+export const isProfileFieldVisible = (
+  key: string,
+  role: string | null | undefined,
+  isCompanyClient: boolean
+): boolean => {
+  const normalizedKey = normalizeFieldKey(key);
+
+  if (
+    isOwnIdField(key) ||
+    isRelationIdField(key) ||
+    normalizedKey.includes("senha") ||
+    normalizedKey.includes("password")
+  ) {
+    return false;
+  }
+
+  if (normalizeRole(role) !== "cliente") return true;
+  if (isCompanyClient && normalizedKey === "obs") return false;
+  if (!isCompanyClient && normalizedKey === "razao") return false;
+
+  return true;
 };
 
 export const getScopedListPath = (

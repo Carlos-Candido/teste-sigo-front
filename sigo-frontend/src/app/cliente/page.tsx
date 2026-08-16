@@ -32,7 +32,7 @@ const extractList = (data: unknown): RecordValue[] => {
   return [];
 };
 
-const getValue = (record: RecordValue | undefined, ...keys: string[]): any => {
+const getValue = (record: RecordValue | undefined, ...keys: string[]): unknown => {
   if (!record) return undefined;
   const entries = Object.entries(record).map(([key, value]) => [
     key.replace(/[^a-zA-Z0-9]/g, "").toLowerCase(),

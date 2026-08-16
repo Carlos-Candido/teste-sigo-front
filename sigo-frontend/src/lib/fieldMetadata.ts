@@ -74,8 +74,8 @@ export const enumOptionsByKey: Record<string, SelectOption[]> = {
     { value: 3, label: "Concluído" },
   ],
   tipocliente: [
-    { value: 1, label: "Fisico" },
-    { value: 2, label: "Juridico" },
+    { value: 1, label: "Físico" },
+    { value: 2, label: "Jurídico" },
   ],
 };
 
