@@ -485,7 +485,7 @@ export default function PerfilPage() {
         if (
           isTopLevel &&
           normalizedRole === "cliente" &&
-          ((isCompanyClient && normalized === "obs") ||
+          ((isCompanyClient && ["obs", "datanasc", "sexo"].includes(normalized)) ||
             (!isCompanyClient && normalized === "razao"))
         ) {
           return;
@@ -557,7 +557,11 @@ export default function PerfilPage() {
       return;
     }
     const birthDate = String(getRecordValue(formData, "DataNasc") ?? "").slice(0, 10);
-    if (normalizedRole === "cliente" && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+    if (
+      normalizedRole === "cliente" &&
+      !isCompanyClient &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)
+    ) {
       setError("Informe uma data de nascimento válida.");
       return;
     }

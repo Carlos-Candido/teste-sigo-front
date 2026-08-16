@@ -162,12 +162,14 @@ export const validateClientRegistration = (
   if (phoneDigits && ![10, 11].includes(phoneDigits.length)) {
     errors.phone = "Informe DDD e um telefone com 8 ou 9 dígitos.";
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(form.birthDate)) {
-    errors.birthDate = "Informe a data de nascimento.";
-  } else if (form.birthDate > getTodayIso()) {
-    errors.birthDate = "A data de nascimento não pode estar no futuro.";
+  if (!isCompany) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.birthDate)) {
+      errors.birthDate = "Informe a data de nascimento.";
+    } else if (form.birthDate > getTodayIso()) {
+      errors.birthDate = "A data de nascimento não pode estar no futuro.";
+    }
+    if (!form.gender) errors.gender = "Selecione o sexo.";
   }
-  if (!form.gender) errors.gender = "Selecione o sexo.";
 
   return errors;
 };
@@ -191,6 +193,8 @@ export const changeClientType = (
   document: "",
   observation: clientType === clientTypes.company ? "" : form.observation,
   corporateName: clientType === clientTypes.individual ? "" : form.corporateName,
+  birthDate: clientType === clientTypes.company ? "" : form.birthDate,
+  gender: clientType === clientTypes.company ? "" : form.gender,
 });
 
 export const buildClientRegistrationPayload = (form: ClientRegistrationForm) => ({
@@ -207,13 +211,16 @@ export const buildClientProfilePayload = (
   const phoneDigits = onlyDigits(form.phone);
   const typeSpecificFields = form.clientType === clientTypes.company
     ? { razao: form.corporateName.trim() }
-    : { obs: form.observation.trim() };
+    : {
+        obs: form.observation.trim(),
+        dataNasc: form.birthDate,
+        sexo: Number(form.gender),
+      };
 
   return {
     nome: form.name.trim(),
     email: form.email.trim().toLowerCase(),
     cpf_Cnpj: onlyDigits(form.document),
-    dataNasc: form.birthDate,
     numero: Number(form.number),
     rua: form.street.trim(),
     cidade: form.city.trim(),
@@ -222,7 +229,6 @@ export const buildClientProfilePayload = (
     estado: form.state,
     pais: "Brasil",
     complemento: form.complement.trim(),
-    sexo: Number(form.gender),
     tipoCliente: form.clientType === clientTypes.company ? 2 : 1,
     telefones: phoneDigits
       ? [{

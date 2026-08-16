@@ -40,5 +40,9 @@ describe("visibilidade dos dados do perfil", () => {
     expect(isProfileFieldVisible("razao", "Cliente", false)).toBe(false);
     expect(isProfileFieldVisible("Obs", "Cliente", true)).toBe(false);
     expect(isProfileFieldVisible("razao", "Cliente", true)).toBe(true);
+    expect(isProfileFieldVisible("DataNasc", "Cliente", true)).toBe(false);
+    expect(isProfileFieldVisible("Sexo", "Cliente", true)).toBe(false);
+    expect(isProfileFieldVisible("DataNasc", "Cliente", false)).toBe(true);
+    expect(isProfileFieldVisible("Sexo", "Cliente", false)).toBe(true);
   });
 });

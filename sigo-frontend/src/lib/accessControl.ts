@@ -194,6 +194,7 @@ export const isProfileFieldVisible = (
 
   if (normalizeRole(role) !== "cliente") return true;
   if (isCompanyClient && normalizedKey === "obs") return false;
+  if (isCompanyClient && ["datanasc", "sexo"].includes(normalizedKey)) return false;
   if (!isCompanyClient && normalizedKey === "razao") return false;
 
   return true;

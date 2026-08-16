@@ -47,6 +47,8 @@ describe("cadastro público", () => {
     const company = changeClientType(physical, clientTypes.company);
     expect(company.document).toBe("");
     expect(company.observation).toBe("");
+    expect(company.birthDate).toBe("");
+    expect(company.gender).toBe("");
 
     const physicalAgain = changeClientType(
       { ...company, document: "11.222.333/0001-81", corporateName: "Empresa SIGO Ltda." },
@@ -63,6 +65,8 @@ describe("cadastro público", () => {
     );
 
     expect(payload).toHaveProperty("obs", "Cadastro físico");
+    expect(payload).toHaveProperty("dataNasc", "1990-05-10");
+    expect(payload).toHaveProperty("sexo", 2);
     expect(payload).not.toHaveProperty("razao");
     expect(payload.tipoCliente).toBe(1);
   });
@@ -81,6 +85,8 @@ describe("cadastro público", () => {
 
     expect(payload).toHaveProperty("razao", "Empresa SIGO Ltda.");
     expect(payload).not.toHaveProperty("obs");
+    expect(payload).not.toHaveProperty("dataNasc");
+    expect(payload).not.toHaveProperty("sexo");
     expect(payload.tipoCliente).toBe(2);
   });
 
@@ -93,6 +99,22 @@ describe("cadastro público", () => {
     };
     expect(validateClientRegistration(company).corporateName).toBe("Informe a razão social.");
     expect(validateClientRegistration(createValidClient()).corporateName).toBeUndefined();
+  });
+
+  it("não valida nascimento nem sexo de pessoa jurídica", () => {
+    const company = {
+      ...createValidClient(),
+      clientType: clientTypes.company,
+      document: "11.222.333/0001-81",
+      corporateName: "Empresa SIGO Ltda.",
+      birthDate: "",
+      gender: "",
+    };
+
+    const errors = validateClientRegistration(company);
+
+    expect(errors.birthDate).toBeUndefined();
+    expect(errors.gender).toBeUndefined();
   });
 
   it("valida o DTO real da oficina antes do envio", () => {

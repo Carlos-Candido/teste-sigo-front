@@ -93,6 +93,8 @@ export function ClientRegistrationForm() {
       document: undefined,
       observation: undefined,
       corporateName: undefined,
+      birthDate: undefined,
+      gender: undefined,
     }));
     setRequestError(null);
   };
@@ -204,7 +206,7 @@ export function ClientRegistrationForm() {
             </div>
           </fieldset>
 
-          <fieldset className="grid gap-4 md:grid-cols-2" disabled={isLoading}>
+          <fieldset className="grid items-start gap-4 md:grid-cols-2" disabled={isLoading}>
             <legend className="mb-1 text-sm font-black text-[var(--sigo-blue)] md:col-span-2">
               Dados da conta
             </legend>
@@ -270,17 +272,6 @@ export function ClientRegistrationForm() {
               helperText="Opcional. Informe DDD e 8 ou 9 dígitos."
               error={errors.phone}
             />
-            <TextInput
-              id="client-birth-date"
-              name="birthDate"
-              label="Data de nascimento"
-              value={form.birthDate}
-              onChange={(value) => updateField("birthDate", value)}
-              type="date"
-              max={getTodayIso()}
-              error={errors.birthDate}
-              required
-            />
             {isCompany ? (
               <TextInput
                 id="client-corporate-name"
@@ -293,42 +284,55 @@ export function ClientRegistrationForm() {
                 required
               />
             ) : (
-              <TextInput
-                id="client-observation"
-                name="observation"
-                label="Observação"
-                value={form.observation}
-                onChange={(value) => updateField("observation", value)}
-                maxLength={500}
-                helperText="Opcional."
-                error={errors.observation}
-              />
+              <>
+                <TextInput
+                  id="client-birth-date"
+                  name="birthDate"
+                  label="Data de nascimento"
+                  value={form.birthDate}
+                  onChange={(value) => updateField("birthDate", value)}
+                  type="date"
+                  max={getTodayIso()}
+                  error={errors.birthDate}
+                  required
+                />
+                <TextInput
+                  id="client-observation"
+                  name="observation"
+                  label="Observação"
+                  value={form.observation}
+                  onChange={(value) => updateField("observation", value)}
+                  maxLength={500}
+                  helperText="Opcional."
+                  error={errors.observation}
+                />
+                <div className="sigo-label">
+                  <label htmlFor="client-gender">Sexo</label>
+                  <select
+                    id="client-gender"
+                    name="gender"
+                    className={`sigo-input ${errors.gender ? "border-[var(--sigo-danger)]" : ""}`.trim()}
+                    value={form.gender}
+                    onChange={(event) => updateField("gender", event.target.value)}
+                    aria-invalid={Boolean(errors.gender)}
+                    aria-describedby={errors.gender ? "client-gender-error" : undefined}
+                    required
+                  >
+                    <option value="">Selecione</option>
+                    {enumOptionsByKey.sexo.map((option) => (
+                      <option key={String(option.value)} value={String(option.value)}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.gender ? (
+                    <span id="client-gender-error" className="text-xs font-semibold text-[var(--sigo-danger)]">
+                      {errors.gender}
+                    </span>
+                  ) : null}
+                </div>
+              </>
             )}
-            <div className="sigo-label">
-              <label htmlFor="client-gender">Sexo</label>
-              <select
-                id="client-gender"
-                name="gender"
-                className={`sigo-input ${errors.gender ? "border-[var(--sigo-danger)]" : ""}`.trim()}
-                value={form.gender}
-                onChange={(event) => updateField("gender", event.target.value)}
-                aria-invalid={Boolean(errors.gender)}
-                aria-describedby={errors.gender ? "client-gender-error" : undefined}
-                required
-              >
-                <option value="">Selecione</option>
-                {enumOptionsByKey.sexo.map((option) => (
-                  <option key={String(option.value)} value={String(option.value)}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {errors.gender ? (
-                <span id="client-gender-error" className="text-xs font-semibold text-[var(--sigo-danger)]">
-                  {errors.gender}
-                </span>
-              ) : null}
-            </div>
           </fieldset>
 
           <AddressFields form={form} errors={errors} disabled={isLoading} onChange={updateAddress} />
