@@ -5,10 +5,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { normalizeRole } from "@/lib/accessControl";
 import { routes } from "@/navigation/routes";
 import { useTheme } from "@/contexts/ThemeContext";
+import { profileTypeInfo } from "@/components/Profile/ProfileTypeIcon";
 
 export function NavBar() {
-  const { token, userName, userRole, logout } = useAuth();
+  const { token, userName, fullName, userRole, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const normalizedRole = normalizeRole(userRole);
+  const authenticatedName =
+    fullName ||
+    userName ||
+    (normalizedRole === "unknown" ? "usuário" : profileTypeInfo[normalizedRole].label);
   const handleLogout = () => {
     logout();
   };
@@ -17,7 +23,7 @@ export function NavBar() {
     <header className="sticky top-0 z-40 border-b border-white/10 bg-gradient-to-r from-[var(--sigo-blue-deep)] via-[var(--sigo-blue-dark)] to-[var(--sigo-blue)] text-white shadow-[var(--sigo-shadow-md)]">
       <div className="sigo-shell sigo-navbar-shell flex min-h-20 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
-          href={token ? (normalizeRole(userRole) === "cliente" ? routes.clientHome : routes.dashboard) : routes.login}
+          href={token ? (normalizedRole === "cliente" ? routes.clientHome : routes.dashboard) : routes.login}
           className="flex min-w-0 items-center gap-3"
           aria-label="Ir para o dashboard do SIGO"
         >
@@ -39,7 +45,7 @@ export function NavBar() {
           {token ? (
             <>
               <span className="sigo-navbar-greeting text-[0.9375rem] font-bold text-blue-50">
-                {`Olá, ${userName || "usuario"}`}
+                {`Olá, ${authenticatedName}`}
               </span>
               <Link
                 href={routes.profile}
@@ -61,7 +67,7 @@ export function NavBar() {
                   <circle cx="12" cy="7" r="4" />
                 </svg>
               </Link>
-              <div className="flex items-center gap-2" aria-label="Selecionar tema">
+              <div className="flex items-center gap-2" role="group" aria-label="Selecionar tema">
                 <img src="/sun.png" alt="Tema claro" className="sigo-theme-icon h-5 w-5 object-contain" />
                 <button
                   type="button"
@@ -106,7 +112,7 @@ export function NavBar() {
               </button>
             </>
           ) : (
-            <div className="flex items-center gap-2" aria-label="Selecionar tema">
+            <div className="flex items-center gap-2" role="group" aria-label="Selecionar tema">
               <img src="/sun.png" alt="Tema claro" className="sigo-theme-icon h-5 w-5 object-contain" />
               <button
                 type="button"

@@ -201,8 +201,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (payload: AuthLoginPayload): Promise<ApiResult> => {
-    const normalizedIdentifier = payload.email.trim();
-    const accountType = payload.accountType ?? (normalizedIdentifier.includes("@") ? "funcionario" : "cliente");
+    const normalizedIdentifier = payload.identifier.trim();
+    const accountType = payload.accountType;
     const loginRoutes = [loginRouteByAccount[accountType]];
     let lastResult: ApiResult | null = null;
 
@@ -212,7 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         body: isClienteRoute
           ? {
-              cpf: normalizedIdentifier.replace(/\D/g, ""),
+              cpf_Cnpj: normalizedIdentifier.replace(/\D/g, ""),
               senha: payload.password,
             }
           : {

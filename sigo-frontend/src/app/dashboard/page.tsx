@@ -100,6 +100,7 @@ const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
 export default function DashboardPage() {
   const router = useRouter();
   const { baseUrl, token, userRole, oficinaId } = useAuth();
+  const isEmployee = normalizeRole(userRole) === "funcionario";
   const configs = useMemo(
     () =>
       getAllowedManagementConfigs(entityConfigs, userRole, oficinaId).filter(
@@ -238,7 +239,7 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   return (
-    <ProtectedRoute allowedRoles={["oficina"]}>
+    <ProtectedRoute allowedRoles={["oficina", "funcionario"]}>
       <div className="sigo-page">
         <NavBar />
         <main className="sigo-shell sigo-dashboard-shell sigo-management-shell grid gap-7 py-8 lg:grid-cols-[310px_minmax(0,1fr)] lg:items-start">
@@ -246,7 +247,9 @@ export default function DashboardPage() {
           <div className="sigo-card sigo-dashboard-panel min-w-0 overflow-hidden bg-white">
             <header>
               <p className="text-sm font-black uppercase tracking-[0.12em] text-[var(--sigo-blue)]">Dashboard</p>
-              <h1 className="mt-1 text-xl font-extrabold text-[var(--sigo-text)]">Painel da oficina</h1>
+              <h1 className="mt-1 text-xl font-extrabold text-[var(--sigo-text)]">
+                {isEmployee ? "Painel operacional" : "Painel da oficina"}
+              </h1>
             </header>
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
