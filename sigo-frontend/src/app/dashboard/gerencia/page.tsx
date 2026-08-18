@@ -428,16 +428,17 @@ const getFormValidationError = (
       if (Number(getRecordValue(line, "ValorUnitario")) < 0) return "O valor unitário da peça não pode ser negativo.";
     }
   }
-  const hasInvalidElapsedTime = (value: unknown): boolean => {
-    if (Array.isArray(value)) return value.some(hasInvalidElapsedTime);
-    if (!isPlainObject(value)) return false;
-    return Object.entries(value).some(([key, fieldValue]) =>
-      normalizeFieldKey(key) === "tempodec"
-        ? String(fieldValue ?? "").trim().length > 0 &&
-          !/^\\d{2}:(?:[0-5]\\d|60)$/.test(String(fieldValue))
-        : hasInvalidElapsedTime(fieldValue)
-    );
-  };
+const hasInvalidElapsedTime = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(hasInvalidElapsedTime);
+  if (!isPlainObject(value)) return false;
+
+  return Object.entries(value).some(([key, fieldValue]) =>
+    normalizeFieldKey(key) === "tempodec"
+      ? String(fieldValue ?? "").trim().length > 0 &&
+        !/^\d{2}:(?:[0-5]\d|60)$/.test(String(fieldValue).trim())
+      : hasInvalidElapsedTime(fieldValue)
+  );
+};
   if (hasInvalidElapsedTime(data)) {
     return "Informe o tempo decorrido no formato HH:MM, com minutos entre 00 e 60.";
   }

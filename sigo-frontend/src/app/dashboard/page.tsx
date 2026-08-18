@@ -207,11 +207,21 @@ export default function DashboardPage() {
       ? sum + toDashboardNumber(getValue(item.order, "ValorTotal"))
       : sum;
   }, 0);
-  const overdue = enrichedOrders.filter((item) => {
-    if (item.status === "Concluída") return false;
-    const endDate = new Date(String(getValue(item.order, "DataFim") ?? ""));
-    return !Number.isNaN(endDate.getTime()) && endDate < now;
-  }).length;
+const overdue = enrichedOrders.filter((item) => {
+  if (item.status === "Concluída") return false;
+
+  const rawEndDate = String(getValue(item.order, "DataFim") ?? "").slice(0, 10);
+
+  if (!rawEndDate) return false;
+
+  const [year, month, day] = rawEndDate.split("-").map(Number);
+  const endDate = new Date(year, month - 1, day);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return !Number.isNaN(endDate.getTime()) && endDate < today;
+}).length;
   const attentionItems = [
     {
       value: statusCounts["Aguardando peça"],

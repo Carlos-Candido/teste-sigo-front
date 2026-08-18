@@ -73,6 +73,7 @@ const roleCapabilities: Record<
   },
   funcionario: {
     clientes: readOnlyScoped,
+    funcionarios: readOnlyScoped,
     veiculos: fullCapability,
     pecas: fullCapability,
     servicos: fullCapability,

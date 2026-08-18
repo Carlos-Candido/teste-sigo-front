@@ -11,11 +11,6 @@ const defaultBaseUrl =
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-const loginRouteByAccount = {
-  cliente: "/api/v1/clientes/login",
-  funcionario: "/api/v1/funcionarios/login",
-  oficina: "/api/v1/oficinas/login",
-} as const;
 
 const sanitizeToken = (value: string): string =>
   value.trim().replace(/^Bearer\s+/i, "").replace(/^"|"$/g, "");
@@ -200,74 +195,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setBaseUrlState(value);
   }, []);
 
-  const login = async (payload: AuthLoginPayload): Promise<ApiResult> => {
-    const normalizedIdentifier = payload.identifier.trim();
-    const accountType = payload.accountType;
-    const loginRoutes = [loginRouteByAccount[accountType]];
-    let lastResult: ApiResult | null = null;
+const login = async (payload: AuthLoginPayload): Promise<ApiResult> => {
+  const result = await fetchJson(baseUrl, "/api/v1/auth/login", {
+    method: "POST",
+    body: {
+      identifier: payload.identifier.trim(),
+      password: payload.password,
+    },
+  });
 
-    for (const route of loginRoutes) {
-      const isClienteRoute = route.includes("/clientes/");
-      const result = await fetchJson(baseUrl, route, {
-        method: "POST",
-        body: isClienteRoute
-          ? {
-              cpf_Cnpj: normalizedIdentifier.replace(/\D/g, ""),
-              senha: payload.password,
-            }
-          : {
-              email: normalizedIdentifier.toLowerCase(),
-              password: payload.password,
-            },
-      });
-      lastResult = result;
-
-      if (result.ok && typeof result.data === "object" && result.data) {
-        const pickToken = (value: unknown): string | null => {
-          if (!value || typeof value !== "object") return null;
-          const record = value as {
-            token?: string;
-            Token?: string;
-            accessToken?: string;
-            AccessToken?: string;
-          };
-          return record.accessToken ?? record.AccessToken ?? record.token ?? record.Token ?? null;
-        };
-        const envelope = result.data as {
-          data?: { token?: string; Token?: string; accessToken?: string; AccessToken?: string } | string | null;
-          Data?: { Token?: string; token?: string; accessToken?: string; AccessToken?: string } | string | null;
-          token?: string;
-          Token?: string;
-          accessToken?: string;
-          AccessToken?: string;
-        };
-        const tokenValue =
-          (typeof envelope.data === "string" ? envelope.data : null) ??
-          (typeof envelope.Data === "string" ? envelope.Data : null) ??
-          pickToken(envelope.data) ??
-          pickToken(envelope.Data) ??
-          envelope.accessToken ??
-          envelope.AccessToken ??
-          envelope.token ??
-          envelope.Token ??
-          "";
-        if (tokenValue) setToken(sanitizeToken(tokenValue));
-        return result;
-      }
-
-      if (result.ok && typeof result.data === "string") {
-        const tokenValue = sanitizeToken(result.data);
-        if (tokenValue) setToken(tokenValue);
-        return result;
-      }
-    }
-
-    return lastResult ?? {
-      ok: false,
-      status: 500,
-      data: null,
+  if (result.ok && typeof result.data === "object" && result.data) {
+    const record = result.data as {
+      accessToken?: string;
+      AccessToken?: string;
+      token?: string;
+      Token?: string;
     };
-  };
+
+    const tokenValue =
+      record.accessToken ??
+      record.AccessToken ??
+      record.token ??
+      record.Token ??
+      "";
+
+    if (tokenValue) {
+      setToken(sanitizeToken(tokenValue));
+    }
+  }
+
+  return result;
+};
 
   const logout = () => {
     setToken("");

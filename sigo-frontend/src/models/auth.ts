@@ -3,7 +3,6 @@ import type { ApiResult } from "@/lib/api";
 export type AuthLoginPayload = {
   identifier: string;
   password: string;
-  accountType: "cliente" | "funcionario" | "oficina";
 };
 
 export type AuthContextValue = {
